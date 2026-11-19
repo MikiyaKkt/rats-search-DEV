@@ -1,0 +1,8 @@
+********* Start testing of TestDownloadCreation *********
+Config: Using QtTest library 6.10.1, Qt 6.10.1 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestDownloadCreation::initTestCase()
+QINFO  : TestDownloadCreation::largeSelectionRetainsProgressWithin500ms() Selection 128 GiB / 32768 pieces / 10 changes; worst milliseconds: 8
+PASS   : TestDownloadCreation::largeSelectionRetainsProgressWithin500ms()
+PASS   : TestDownloadCreation::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 98ms
+********* Finished testing of TestDownloadCreation *********

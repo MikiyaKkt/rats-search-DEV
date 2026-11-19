@@ -1,3 +1,5 @@
+#include "downloadadvancedwidgets.h"
+#include "downloadtextbinder.h"
 #include "settingsdialog.h"
 #include "app/application.h"
 #include "app/config_store.h"
@@ -5,6 +7,7 @@
 #include "app/translation_manager.h"
 #include "autostartmanager.h"
 #include "common/logging.h"
+#include "services/download_service.h"
 #include "rest/api_router.h"
 #include <QApplication>
 
@@ -56,6 +59,7 @@ void SettingsDialog::setupUi()
     tabWidget_->addTab(createIndexerTab(), tr("🕷️ Indexer"));
     tabWidget_->addTab(createFiltersTab(), tr("🔍 Filters"));
     tabWidget_->addTab(createStorageTab(), tr("💾 Storage"));
+    tabWidget_->addTab(createDownloadsTab(), tr("Downloads"));
     dialogLayout->addWidget(tabWidget_, 1);
 
     // Buttons
@@ -632,6 +636,14 @@ void SettingsDialog::loadSettings()
     if (!app_ || !app_->config())
         return;
     auto* config_ = app_->config();
+    const auto policy=app_->downloads()->globalPolicy();
+    downloadPolicyRevision_=policy.revision;
+    schedule_->setValue(policy.schedule);seeding_->setValue(policy.seeding);cacheMiB_->setValue(policy.cacheBytes/1048576.0);
+    downloadLimit_->setValue(policy.downloadRate/1024.0);
+    uploadLimit_->setValue(policy.uploadRate/1024.0);
+    downloadSlots_->setValue(policy.downloadSlots); seedSlots_->setValue(policy.seedSlots);
+    metadataSlots_->setValue(policy.metadataSlots); checkingSlots_->setValue(policy.checkingSlots);
+    btConnections_->setValue(policy.maxConnections); taskConnections_->setValue(policy.taskConnections);
 
     // General
     QString currentLang = config_->language();
@@ -876,6 +888,35 @@ void SettingsDialog::onBrowseDataPath()
 
 void SettingsDialog::onAccepted()
 {
+    auto p=app_->downloads()->globalPolicy();
+    p.downloadRate=qRound64(downloadLimit_->value()*1024); p.uploadRate=qRound64(uploadLimit_->value()*1024);
+    p.downloadSlots=downloadSlots_->value(); p.seedSlots=seedSlots_->value(); p.metadataSlots=metadataSlots_->value();
+    p.checkingSlots=checkingSlots_->value(); p.maxConnections=btConnections_->value(); p.taskConnections=taskConnections_->value();
+    p.schedule=schedule_->value();p.seeding=seeding_->value().value_or(rats::service::SeedingPolicy{});p.cacheBytes=qRound64(cacheMiB_->value()*1048576);
+    const auto result=app_->downloads()->setGlobalPolicy(p,downloadPolicyRevision_);
+    if(result.outcome!=rats::OperationResult::Outcome::Applied) {
+        if(result.applied()) downloadPolicyRevision_=result.revision;
+        QMessageBox::warning(this,tr("Download settings"),result.error.message); return;
+    }
     saveSettings();
     accept();
+}
+
+QWidget* SettingsDialog::createDownloadsTab() {
+    auto* tab=new QWidget; auto* layout=new QFormLayout(tab);
+    auto* texts=new DownloadTextBinder(tab,"SettingsDialog");auto tr=[texts](const char* source){return texts->text(source);};
+    auto rate=[&] { auto* box=new QDoubleSpinBox(tab); box->setDecimals(6); box->setRange(0,8796093022207.0);
+        box->setSuffix(" KiB/s"); box->setSpecialValueText(tr("Unlimited")); return box; };
+    auto count=[&](int max) { auto* box=new QSpinBox(tab); box->setRange(1,max); return box; };
+    downloadLimit_=rate(); uploadLimit_=rate();
+    layout->addRow(tr("Global download limit"),downloadLimit_); layout->addRow(tr("Global upload limit"),uploadLimit_);
+    downloadSlots_=count(1000); seedSlots_=count(1000); metadataSlots_=count(1000); checkingSlots_=count(1000);
+    btConnections_=count(10000); taskConnections_=count(10000);
+    layout->addRow(tr("Active downloads"),downloadSlots_); layout->addRow(tr("Active seeds"),seedSlots_);
+    layout->addRow(tr("Metadata tasks"),metadataSlots_); layout->addRow(tr("File checks"),checkingSlots_);
+    layout->addRow(tr("BT connections total"),btConnections_); layout->addRow(tr("BT connections per task"),taskConnections_);
+    cacheMiB_=new QDoubleSpinBox(tab);cacheMiB_->setDecimals(9);cacheMiB_->setRange(0,256);cacheMiB_->setSuffix(" MiB");cacheMiB_->setSpecialValueText(tr("Disabled"));layout->addRow(tr("Shared read cache"),cacheMiB_);
+    schedule_=new DownloadScheduleWidget(tab);layout->addRow(schedule_);seeding_=new SeedingPolicyWidget(false,tab);layout->addRow(tr("Default seeding conditions"),seeding_);
+    auto* note=new QLabel(tr("Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files."));
+    note->setWordWrap(true); layout->addRow(note);texts->bind(); return wrapInScrollArea(tab);
 }

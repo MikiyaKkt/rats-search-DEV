@@ -1,3 +1,4 @@
+#include <cmath>
 #include "rest/api_router.h"
 
 #include "app/application.h"
@@ -235,6 +236,21 @@ ApiRouter::ApiRouter(app::Application* app, QObject* parent) : QObject(parent), 
 
 void ApiRouter::wireEvents()
 {
+    connect(app_->downloads(), &service::DownloadService::policyChanged, this,
+        [this](const QJsonObject& p){ emit event("downloadPolicyChanged",p); });
+    connect(app_->downloads(), &service::DownloadService::queueChanged, this,
+        [this](const QJsonArray& q){ emit event("downloadQueueChanged",{{"tasks",q}}); });
+    connect(app_->downloads(), &service::DownloadService::filesChanged,this,[this](const QString& hash,const QJsonArray& files){emit event("downloadFilesChanged",{{"hash",hash},{"files",files}});});
+    connect(app_->downloads(), &service::DownloadService::selectedCompleted,this,[this](const QString& hash){emit event("downloadSelectedCompleted",{{"hash",hash}});});
+    connect(app_->downloads(), &service::DownloadService::operationFinished,this,[this](const QString&,const QJsonObject& result){emit event("downloadOperationFinished",result);});
+    connect(app_->downloads(), &service::DownloadService::downloadFailed, this,
+        [this](const QString& hash, const QJsonObject& error) {
+            emit event(QStringLiteral("downloadFailed"), {{"hash", hash}, {"error", error}});
+        });
+    connect(app_->downloads(), &service::DownloadService::stateChanged, this,
+        [this](const QString& hash, const QString& state) {
+            emit event(QStringLiteral("downloadStateChanged"), {{"hash", hash}, {"state", state}});
+        });
     // Bridge service-layer Qt signals to the unified WS event channel. The
     // ApiServer forwards every `event(name, data)` to all connected WebSocket
     // clients, so this restores the live push stream (download progress, votes,
@@ -317,6 +333,7 @@ void ApiRouter::call(const QString& method, const QJsonObject& params, const Res
 
 void ApiRouter::registerMethods()
 {
+    registerDownloadMethods();
     // -----------------------------------------------------------------------
     // Search
     // -----------------------------------------------------------------------
@@ -784,6 +801,26 @@ void ApiRouter::registerMethods()
         respond(Result::success(app_->downloads()->toJsonArray()));
     });
 
+    add("download.pieces.get",[this](const QJsonObject& p,const ResultCallback& reply){
+        const auto maximum=p.contains("maxRanges")?p["maxRanges"].toDouble(-1):256;
+        if(maximum<1 || maximum>2048 || std::floor(maximum)!=maximum || !app_->downloads()->isDownloading(p["hash"].toString())) {reply(Result::failure("Existing hash and maxRanges 1..2048 required"));return;}
+        reply(Result::success(app_->downloads()->pieceMap(p["hash"].toString(),int(maximum))));
+    });
+    add("download.files.set",[this](const QJsonObject& p,const ResultCallback& reply){
+        const auto revision=p["expectedRevision"].toDouble(-1);
+        if(revision<0 || revision>9007199254740991.0 || std::floor(revision)!=revision || !p["files"].isArray()) {reply(Result::failure("Exact expectedRevision and files array required"));return;}
+        const auto d=app_->downloads()->getDownload(p["hash"].toString());
+        QVector<int> priorities(d.files.size(),-1);
+        for(const auto& value:p["files"].toArray()) {
+            const auto f=value.toObject();const double index=f["index"].toDouble(-1),priority=f["priority"].toDouble(-1);
+            if(index<0 || index>=priorities.size() || std::floor(index)!=index || priority<0 || priority>2 || std::floor(priority)!=priority || priorities[int(index)]!=-1) {reply(Result::failure("Invalid or duplicate file index/priority"));return;}
+            priorities[int(index)]=int(priority);
+        }
+        reply(Result::success(app_->downloads()->setFilePriorities(d.hash,priorities,qint64(revision)).toJson()));
+    });
+    for(const auto& method:{"download.recheck","download.retry"}) add(method,[this,retry=QString(method)=="download.retry"](const QJsonObject& p,const ResultCallback& reply){
+        reply(Result::success(app_->downloads()->recheck(p["hash"].toString(),retry).toJson()));
+    });
     add("download.selectFiles", [this](const QJsonObject& params, const ResultCallback& respond) {
         const QString hash = infohash::normalize(params["hash"].toString());
         const bool ok = app_->downloads()->selectFilesJson(hash, params["files"]);
@@ -923,4 +960,50 @@ void ApiRouter::registerMethods()
     });
 }
 
+void ApiRouter::registerDownloadMethods() {
+    auto revision=[](const QJsonObject& p)->qint64 {
+        const auto v=p["expectedRevision"];
+        const double n=v.toDouble(-1);
+        return v.isDouble() && n>=0 && n<=9007199254740991.0 && double(qint64(n))==n ? qint64(n) : -1;
+    };
+    add("download.schedule.get",[this](const QJsonObject&,const ResultCallback& reply){reply(Result::success(app_->downloads()->scheduleStatus()));});
+    add("download.schedule.set",[this,revision](const QJsonObject& p,const ResultCallback& reply){
+        service::BandwidthSchedule schedule;QString error;
+        if(revision(p)<0 || !p["schedule"].isObject() || !service::BandwidthSchedule::fromJson(p["schedule"].toObject(),schedule,error)){reply(Result::failure(error.isEmpty()?"schedule and exact expectedRevision required":error));return;}
+        reply(Result::success(app_->downloads()->setSchedule(schedule,revision(p)).toJson()));
+    });
+    add("download.seeding.set",[this,revision](const QJsonObject& p,const ResultCallback& reply){
+        std::optional<service::SeedingPolicy> policy;QString error;
+        if(revision(p)<0 || !p.contains("policy") || (p.contains("hash") && !p["hash"].isString())){reply(Result::failure("policy and exact expectedRevision required"));return;}
+        if(!p["policy"].isNull()){service::SeedingPolicy value;if(!p["policy"].isObject() || !service::SeedingPolicy::fromJson(p["policy"].toObject(),value,error)){reply(Result::failure(error));return;}policy=value;}
+        reply(Result::success(app_->downloads()->setSeedingPolicy(p["hash"].toString(),policy,revision(p)).toJson()));
+    });    add("download.policy.get",[this](const QJsonObject&,const ResultCallback& reply){
+        reply(Result::success(app_->downloads()->globalPolicy().toJson()));
+    });
+    add("download.policy.set",[this,revision](const QJsonObject& p,const ResultCallback& reply){
+        auto policy=app_->downloads()->globalPolicy(); QString error;
+        if(revision(p)<0 || !p["policy"].isObject() || p["policy"].toObject().contains("revision")
+            || !service::GlobalDownloadPolicy::fromJson(p["policy"].toObject(),policy,error)) {
+            reply(Result::failure(error.isEmpty()?"policy and exact expectedRevision are required":error)); return;
+        }
+        reply(Result::success(app_->downloads()->setGlobalPolicy(policy,revision(p)).toJson()));
+    });
+    add("download.taskPolicy.set",[this,revision](const QJsonObject& p,const ResultCallback& reply){
+        auto policy=app_->downloads()->getDownload(p["hash"].toString()).policy; QString error;
+        if(revision(p)<0 || !p["policy"].isObject() || p["policy"].toObject().contains("revision")
+            || !service::TaskDownloadPolicy::fromJson(p["policy"].toObject(),policy,error)) {
+            reply(Result::failure(error.isEmpty()?"policy and exact expectedRevision are required":error)); return;
+        }
+        reply(Result::success(app_->downloads()->setTaskPolicy(p["hash"].toString(),policy,revision(p)).toJson()));
+    });
+    add("download.queue.move",[this,revision](const QJsonObject& p,const ResultCallback& reply){
+        if(revision(p)<0 || !p["hash"].isString() || (p.contains("beforeHash") && !p["beforeHash"].isString())) {
+            reply(Result::failure("Invalid queue move or expectedRevision")); return;
+        }
+        reply(Result::success(app_->downloads()->moveQueueItem(p["hash"].toString(),p["beforeHash"].toString(),revision(p)).toJson()));
+    });
+    add("download.operation.get",[this](const QJsonObject& p,const ResultCallback& reply){
+        reply(Result::success(app_->downloads()->operationStatus(p["operationId"].toString()).toJson()));
+    });
+}
 } // namespace rats::rest

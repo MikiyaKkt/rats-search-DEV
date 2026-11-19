@@ -1,0 +1,861 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 07c832d..ac56057 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -408,6 +408,7 @@ if(RATS_SEARCH_FEATURES)
+         src/librats/bittorrent/store_buffer.cpp
+         src/librats/bittorrent/disk_io.h
+         src/librats/bittorrent/disk_io.cpp
++        src/librats/bittorrent/boundary_store.cpp
+         src/librats/bittorrent/piece_picker.h
+         src/librats/bittorrent/piece_picker.cpp
+         src/librats/bittorrent/reactor.h
+@@ -928,4 +929,4 @@ if(RATS_INSTALL)
+         ${PROJECT_BINARY_DIR}/cmake/ratsConfigVersion.cmake
+         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/rats
+     )
+-endif()
+\ No newline at end of file
++endif()
+diff --git a/src/librats/bittorrent/boundary_store.cpp b/src/librats/bittorrent/boundary_store.cpp
+new file mode 100644
+index 0000000..e6d9132
+--- /dev/null
++++ b/src/librats/bittorrent/boundary_store.cpp
+@@ -0,0 +1,96 @@
++#include "librats/bittorrent/boundary_store.h"
++#include "librats/bittorrent/bencode.h"
++#include "librats/util/fs.h"
++#include <filesystem>
++#include <stdexcept>
++
++namespace librats::bittorrent {
++BoundaryStore::BoundaryStore(const TorrentInfo& info,std::string path)
++    :files_(info.files()),save_(std::move(path)),hash_(info.info_hash_hex()),priorities_(info.num_files(),1) {
++    root_=combine_paths(combine_paths(save_,".parts"),hash_);
++    load_manifest();
++}
++bool BoundaryStore::load_manifest() {
++    const auto path=combine_paths(root_,"manifest");
++    if(!file_exists(path)) {error_.clear();return true;}
++    std::size_t size=0;auto* raw=read_file_binary(path.c_str(),&size);
++    if(!raw) {error_="Cannot read boundary manifest";return false;}
++    Bytes data(static_cast<std::uint8_t*>(raw),static_cast<std::uint8_t*>(raw)+size);free_file_buffer(raw);
++    try {
++        auto doc=BencodeDecoder::decode(data.data(),data.size());
++        const auto* h=doc.find("hash");const auto* version=doc.find("version");
++        const auto* p=doc.find("priorities");const auto* r=doc.find("revision");
++        if(!h || !h->is_string() || h->as_string()!=hash_ || !version || !version->is_integer() || version->as_integer()!=1
++            || !p || !p->is_string() || p->as_string().size()!=priorities_.size()
++            || !r || !r->is_integer() || r->as_integer()<0 || r->as_integer()>9007199254740991LL) throw std::runtime_error("Invalid boundary manifest");
++        std::vector<int> next;for(unsigned char value:p->as_string()) next.push_back(value);
++        if(!FileSelection::validate(files_,next).empty()) throw std::runtime_error("Invalid boundary priorities");
++        priorities_=std::move(next);revision_=r->as_integer();error_.clear();return true;
++    } catch(...) {error_="Boundary manifest is corrupt or does not match metadata";return false;}
++}
++std::string BoundaryStore::part_path(std::uint32_t piece,std::size_t file) const {
++    return combine_paths(root_,std::to_string(piece)+"-"+std::to_string(file)+".part");
++}
++FileSlice BoundaryStore::full_slice(std::uint32_t piece,std::size_t file) const {
++    for(const auto& s:files_.map_block(piece,0,files_.piece_size(piece))) if(s.file_index==file) return s;
++    return {};
++}
++std::string BoundaryStore::path(std::uint32_t piece,const FileSlice& s) const {
++    return priorities_[s.file_index]?combine_paths(save_,files_.file_at(s.file_index).path):part_path(piece,s.file_index);
++}
++std::uint64_t BoundaryStore::offset(std::uint32_t piece,const FileSlice& s) const {
++    return priorities_[s.file_index]?s.offset:s.offset-full_slice(piece,s.file_index).offset;
++}
++std::string BoundaryStore::read_path(std::uint32_t piece,const FileSlice& s,std::uint64_t& at) const {
++    at=offset(piece,s);auto result=path(piece,s);
++    // A deselected pre-existing final file is preserved and remains readable.
++    if(!priorities_[s.file_index] && !file_exists(result)) {at=s.offset;return combine_paths(save_,files_.file_at(s.file_index).path);}
++    return result;
++}
++bool BoundaryStore::ensure_part(std::uint32_t piece,const FileSlice& s) {
++    auto target=part_path(piece,s.file_index);
++    if(file_exists(target)) return true;
++    return create_directories(root_.c_str()) && create_file_with_size(target,full_slice(piece,s.file_index).size);
++}
++bool BoundaryStore::save_manifest(const std::vector<int>& p,std::uint64_t revision) {
++    if(!create_directories(root_.c_str())) return false;
++    auto doc=BencodeValue::create_dict();doc["version"]=BencodeValue(std::int64_t(1));doc["hash"]=BencodeValue(hash_);
++    std::string encoded;for(int value:p) encoded.push_back(char(value));doc["priorities"]=BencodeValue(encoded);
++    doc["revision"]=BencodeValue(std::int64_t(revision));const auto bytes=doc.encode();
++    auto target=combine_paths(root_,"manifest"),temp=target+".tmp";
++    return create_file_binary(temp.c_str(),bytes.data(),bytes.size()) && replace_file_atomic(temp.c_str(),target.c_str());
++}
++bool BoundaryStore::materialize(std::size_t index,std::vector<std::string>& created) {
++    const auto& file=files_.file_at(index);const auto target=combine_paths(save_,file.path);
++    const bool exists=file_exists(target);
++    if(!create_directories(get_parent_directory(target).c_str())) return false;
++    if(!exists) {if(!create_file_with_size(target,file.size)) return false;created.push_back(target);}
++    if(!file.size) return true;
++    const auto first=std::uint64_t(file.offset)/files_.piece_length(),last=std::uint64_t(file.offset+file.size-1)/files_.piece_length();
++    for(auto p=first;p<=last;++p) {
++        const auto part=part_path(p,index);if(!file_exists(part)) continue;
++        const auto s=full_slice(p,index);Bytes data(s.size);
++        if(get_file_size(part.c_str())!=s.size) continue; // recheck will invalidate missing/truncated bytes
++        if(!read_file_chunk(part,0,data.data(),data.size()) || !write_file_chunk(target,s.offset,data.data(),data.size())) return false;
++    }
++    return true;
++}
++bool BoundaryStore::apply_selection_change(const std::vector<int>& next,std::uint64_t revision) {
++    if(!error_.empty() && !load_manifest()) return false;
++    if(!FileSelection::validate(files_,next).empty()) return false;
++    std::vector<std::string> created;
++    for(std::size_t i=0;i<next.size();++i) if(next[i] && (!priorities_[i] || files_.file_at(i).size==0)) {
++        if(!materialize(i,created)) {for(const auto& path:created) delete_file(path.c_str());return false;}
++    }
++    if(!save_manifest(next,revision)) {for(const auto& path:created) delete_file(path.c_str());return false;}
++    priorities_=next;revision_=revision;
++    const auto wanted=FileSelection::build_piece_priorities(files_,next);
++    // Delete only engine-owned fragments whose numeric identities are known.
++    // Selected data has been materialized before the atomic manifest commit.
++    for(std::uint32_t piece=0;piece<files_.num_pieces();++piece)
++        for(const auto& slice:files_.map_block(piece,0,files_.piece_size(piece)))
++            if(next[slice.file_index] || wanted[piece]==PiecePriority::DontDownload)
++                delete_file(part_path(piece,slice.file_index).c_str());
++    return true;
++}
++}
+diff --git a/src/librats/bittorrent/boundary_store.h b/src/librats/bittorrent/boundary_store.h
+new file mode 100644
+index 0000000..04d9de8
+--- /dev/null
++++ b/src/librats/bittorrent/boundary_store.h
+@@ -0,0 +1,31 @@
++#pragma once
++#include "librats/bittorrent/torrent_info.h"
++#include "librats/bittorrent/file_selection.h"
++#include <string>
++
++namespace librats::bittorrent {
++// Called only by disk workers. Selection changes run behind an exclusive queue
++// barrier; normal reads/writes never race mapping replacement.
++class BoundaryStore {
++public:
++    BoundaryStore(const TorrentInfo&,std::string savePath);
++    bool load_manifest();
++    bool apply_selection_change(const std::vector<int>& priorities,std::uint64_t revision);
++    const std::vector<int>& priorities() const {return priorities_;}
++    std::uint64_t revision() const {return revision_;}
++    const std::string& error() const {return error_;}
++    std::string path(std::uint32_t piece,const FileSlice&) const;
++    std::uint64_t offset(std::uint32_t piece,const FileSlice&) const;
++    bool ensure_part(std::uint32_t piece,const FileSlice&);
++    std::string read_path(std::uint32_t piece,const FileSlice&,std::uint64_t& offset) const;
++private:
++    std::string part_path(std::uint32_t piece,std::size_t file) const;
++    FileSlice full_slice(std::uint32_t piece,std::size_t file) const;
++    bool save_manifest(const std::vector<int>&,std::uint64_t);
++    bool materialize(std::size_t file,std::vector<std::string>& created);
++    FileStorage files_;
++    std::string save_,root_,hash_,error_;
++    std::vector<int> priorities_;
++    std::uint64_t revision_=0;
++};
++}
+diff --git a/src/librats/bittorrent/client.cpp b/src/librats/bittorrent/client.cpp
+index 7dde7fd..b23b383 100644
+--- a/src/librats/bittorrent/client.cpp
++++ b/src/librats/bittorrent/client.cpp
+@@ -42,6 +42,8 @@ void Client::stop() {
+     }
+     reactor_.stop();  // join the loop thread first so nothing touches state concurrently
+     opened_ = false;
++    auto pendingOperations=std::move(file_operations_);file_operations_.clear();
++    for(auto& [hash,done]:pendingOperations) done({"engineStopped","stop","",0,false},0);
+     if (reap_timer_ != kInvalidTimerId) { reactor_.cancel(reap_timer_); reap_timer_ = kInvalidTimerId; }
+     for (auto& [hash, t] : torrents_) {
+         // Drop the traversal too: nothing consumes its result any more, and it would
+@@ -551,6 +553,9 @@ void Client::remove_torrent(const InfoHash& info_hash, bool /*delete_files*/) {
+ }
+ 
+ void Client::remove_torrent_impl(const InfoHash& info_hash) {
++    if(auto pending=file_operations_.find(info_hash);pending!=file_operations_.end()) {
++        auto done=std::move(pending->second);file_operations_.erase(pending);done({"taskRemoved","remove","",0,false},0);
++    }
+     auto it = torrents_.find(info_hash);
+     if (it == torrents_.end()) return;
+     LOG_INFO("bt.client", "removed torrent " << short_hash(info_hash));
+@@ -588,6 +593,9 @@ TorrentStatus Client::torrent_status(const InfoHash& info_hash) {
+         const Torrent*     t    = it->second.get();
+         const TorrentInfo& info = t->torrent_info();
+         s.exists       = true;
++        s.wanted_bytes=t->wanted_bytes();s.wanted_verified=t->wanted_verified_bytes();s.selection_revision=t->selection_revision();
++        s.selected_complete=t->selected_complete() && !t->last_error() && t->state()!=Torrent::State::Checking && !t->check_pending();
++        s.full_complete=t->full_complete() && !t->last_error() && !t->check_pending() && t->state()!=Torrent::State::Checking;
+         s.name         = info.name();
+         s.has_metadata = t->has_metadata();
+         s.is_complete  = t->is_complete() && !t->last_error() && t->state() != Torrent::State::Checking;
+@@ -606,7 +614,8 @@ TorrentStatus Client::torrent_status(const InfoHash& info_hash) {
+             const auto verified = t->file_verified_bytes();
+             std::size_t i = 0;
+             for (const FileEntry& f : info.files().files()) {
+-                s.files.push_back({f.path, f.size, verified[i++]});
++                const auto& priorities=t->file_priorities();
++                s.files.push_back({f.path, f.size, verified[i],i<priorities.size()?priorities[i]:1});++i;
+             }
+         }
+         return s;
+@@ -676,7 +685,7 @@ void Client::schedule_reap() {
+ 
+ void Client::reap_closed() {
+     for(const auto& [hash,t]:torrents_) bandwidth_.set_active(hash,t->content_allowed() && !t->is_paused() &&
+-        (t->state()==Torrent::State::Downloading || t->state()==Torrent::State::Seeding),t->state()==Torrent::State::Downloading);
++        (t->state()==Torrent::State::Downloading || t->state()==Torrent::State::Seeding || t->state()==Torrent::State::PartialSeeding),t->state()==Torrent::State::Downloading);
+     connections_.erase(
+         std::remove_if(connections_.begin(), connections_.end(),
+                        [](const std::unique_ptr<PeerConnection>& pc) { return pc->closed(); }),
+@@ -773,4 +782,33 @@ void Client::wake_bandwidth_waiters() {
+     for(auto* peer:peers) peer->on_budget_ready();
+     for(auto& [h,t]:torrents_) t->wake_bandwidth();
+ }
++void Client::set_file_priorities(const InfoHash& hash,std::vector<int> priorities,std::uint64_t expected,FileOperationHandler done) {
++    run_on_reactor([&] {
++        auto t=torrents_.find(hash);
++        if(t==torrents_.end()) {done({"taskNotFound","selection","",0,false},0);return;}
++        if(file_operations_.count(hash)) {done({"operationBusy","selection","",0,true},t->second->selection_revision());return;}
++        if(expected!=t->second->selection_revision()) {done({"revisionConflict","selection","",0,false},t->second->selection_revision());return;}
++        if(!t->second->has_metadata() || !FileSelection::validate(t->second->torrent_info().files(),priorities).empty() || expected>=9007199254740991ULL) {
++            done({"invalidSelection","selection","",0,false},expected);return;
++        }
++        file_operations_[hash]=std::move(done);
++        t->second->set_file_priorities(std::move(priorities),expected+1,[this,hash](DiskError error){
++            auto op=file_operations_.find(hash);if(op==file_operations_.end()) return;
++            auto done=std::move(op->second);file_operations_.erase(op);
++            const auto t=torrents_.find(hash);done(error,t==torrents_.end()?0:t->second->selection_revision());
++        });
++    });
++}
++void Client::recheck_torrent(const InfoHash& hash,bool retry,FileOperationHandler done) {
++    run_on_reactor([&] {
++        auto t=torrents_.find(hash);if(t==torrents_.end()) {done({"taskNotFound","recheck","",0,false},0);return;}
++        if(file_operations_.count(hash)) {done({"operationBusy","recheck","",0,true},t->second->selection_revision());return;}
++        file_operations_[hash]=std::move(done);
++        t->second->recheck([this,hash](DiskError error){
++            auto op=file_operations_.find(hash);if(op==file_operations_.end()) return;
++            auto done=std::move(op->second);file_operations_.erase(op);
++            const auto t=torrents_.find(hash);done(error,t==torrents_.end()?0:t->second->selection_revision());
++        },retry);
++    });
++}
+ } // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/client.h b/src/librats/bittorrent/client.h
+index c9ac076..53019e7 100644
+--- a/src/librats/bittorrent/client.h
++++ b/src/librats/bittorrent/client.h
+@@ -58,7 +58,9 @@ struct CreateResult {
+ /// on the reactor thread so callers on any thread get a consistent view without
+ /// touching the (lock-free, reactor-owned) Torrent directly.
+ struct TorrentStatus {
+-    struct File { std::string path; std::int64_t size = 0; std::uint64_t verified = 0; };
++    struct File { std::string path; std::int64_t size = 0; std::uint64_t verified = 0; int priority=1; };
++    std::uint64_t wanted_bytes=0,wanted_verified=0,selection_revision=0;
++    bool selected_complete=false,full_complete=false;
+     std::uint64_t verified = 0;
+     std::uint64_t hash_failures = 0;
+     Torrent::State state = Torrent::State::Stopped;
+@@ -128,6 +130,9 @@ public:
+     CreateResult create_magnet(const std::string& uri, const std::string& save_path, CreateOptions options = {});
+     bool start_metadata(const InfoHash& hash);
+     bool start_content(const InfoHash& hash);
++    using FileOperationHandler=std::function<void(DiskError,std::uint64_t)>;
++    void set_file_priorities(const InfoHash&,std::vector<int>,std::uint64_t expected,FileOperationHandler);
++    void recheck_torrent(const InfoHash&,bool retry,FileOperationHandler);
+     void set_global_policy(BandwidthController::Policy policy, std::size_t connections, std::size_t taskConnections, std::size_t checking);
+     bool set_task_policy(const InfoHash& hash, BandwidthController::Policy policy, std::size_t connections);
+     bool allow_content(const InfoHash& hash, bool allowed);
+@@ -313,6 +318,7 @@ private:
+     std::unordered_map<socket_t, InfoHash> pending_hashes_;
+     std::unordered_map<socket_t,std::pair<std::string,std::uint16_t>> pending_endpoints_;
+     BandwidthController bandwidth_;
++    std::map<InfoHash,FileOperationHandler> file_operations_;
+     std::size_t max_connections_ = 200, task_connections_ = 50, checking_limit_ = 1;
+     std::map<InfoHash,std::size_t> task_limits_;
+     std::shared_ptr<std::atomic<std::size_t>> active_checks_ = std::make_shared<std::atomic<std::size_t>>(0);
+diff --git a/src/librats/bittorrent/disk_io.cpp b/src/librats/bittorrent/disk_io.cpp
+index 83b1f47..37f0665 100644
+--- a/src/librats/bittorrent/disk_io.cpp
++++ b/src/librats/bittorrent/disk_io.cpp
+@@ -20,6 +20,7 @@ DiskError disk_error(bool ok) {
+ ThreadedDiskIo::ThreadedDiskIo(const TorrentInfo& info, std::string save_path,
+                                CompletionPoster poster, Config config)
+     : files_(info.files())
++    , boundary_(info,save_path)
+     , piece_hashes_(info.piece_hashes())
+     , save_path_(std::move(save_path))
+     , poster_(std::move(poster))
+@@ -45,26 +46,30 @@ void ThreadedDiskIo::stop() {
+     workers_.clear();
+ }
+ 
+-void ThreadedDiskIo::enqueue(std::function<void()> job) {
++void ThreadedDiskIo::enqueue(std::function<void()> job,bool barrier) {
+     {
+         std::lock_guard<std::mutex> lock(mutex_);
+         if (stopping_) return;
+-        jobs_.push(std::move(job));
++        jobs_.push({std::move(job),barrier});
+     }
+     cv_.notify_one();
+ }
+ 
+ void ThreadedDiskIo::worker_loop() {
+     for (;;) {
+-        std::function<void()> job;
++        Job job;
+         {
+             std::unique_lock<std::mutex> lock(mutex_);
+-            cv_.wait(lock, [this] { return stopping_ || !jobs_.empty(); });
++            cv_.wait(lock, [this] { return (stopping_ && jobs_.empty()) ||
++                (!barrier_active_ && !jobs_.empty() && (!jobs_.front().barrier || active_jobs_==0)); });
+             if (stopping_ && jobs_.empty()) return;
+             job = std::move(jobs_.front());
+             jobs_.pop();
++            ++active_jobs_;barrier_active_=job.barrier;
+         }
+-        job();
++        job.run();
++        {std::lock_guard<std::mutex> lock(mutex_);--active_jobs_;if(job.barrier) barrier_active_=false;}
++        cv_.notify_all();
+     }
+ }
+ 
+@@ -114,8 +119,9 @@ bool ThreadedDiskIo::write_range(std::uint32_t piece, std::uint32_t offset, cons
+     auto slices = files_.map_block(piece, offset, std::int64_t(data.size()));
+     std::int64_t in_pos = 0;
+     for (const auto& s : slices) {
+-        if (!ensure_file(s.file_index)) return false;
+-        if (!write_file_chunk(file_path(s.file_index), std::uint64_t(s.offset),
++        if(boundary_.priorities()[s.file_index]) {if (!ensure_file(s.file_index)) return false;}
++        else {std::lock_guard<std::mutex> guard(ensure_mutex_);if(!boundary_.ensure_part(piece,s)) return false;}
++        if (!write_file_chunk(boundary_.path(piece,s), boundary_.offset(piece,s),
+                               data.data() + in_pos, std::size_t(s.size))) {
+             return false;
+         }
+@@ -130,12 +136,13 @@ bool ThreadedDiskIo::read_range(std::uint32_t piece, std::uint32_t offset, std::
+     auto slices = files_.map_block(piece, offset, std::int64_t(length));
+     std::int64_t out_pos = 0;
+     for (const auto& s : slices) {
+-        const std::string path = file_path(s.file_index);
++        std::uint64_t at=0;
++        const std::string path = boundary_.read_path(piece,s,at);
+         // On the check path a missing/short file is expected (piece not yet on
+         // disk); probe the size first so we don't trip read_file_chunk's error log.
+         if (allow_short) {
+             const auto size = get_file_size(path.c_str());
+-            if (size < s.offset + s.size) {
++            if (size < std::int64_t(at) + s.size) {
+                 const auto error = last_file_error();
+                 // Missing/short files are expected during a recheck. Permission
+                 // and malformed-path failures are not ordinary missing pieces.
+@@ -143,7 +150,7 @@ bool ThreadedDiskIo::read_range(std::uint32_t piece, std::uint32_t offset, std::
+                 return false;
+             }
+         }
+-        if (!read_file_chunk(path, std::uint64_t(s.offset), out.data() + out_pos, std::size_t(s.size)))
++        if (!read_file_chunk(path, at, out.data() + out_pos, std::size_t(s.size)))
+             return false;
+         out_pos += s.size;
+     }
+@@ -216,6 +223,10 @@ void ThreadedDiskIo::async_hash_detailed(std::uint32_t piece,
+ void ThreadedDiskIo::async_check_files_detailed(Bitfield trusted, DiskCheckProgress progress,
+     std::function<void(DiskError, Bitfield)> handler) {
+     enqueue([this, trusted = std::move(trusted), progress = std::move(progress), handler = std::move(handler)]() mutable {
++        if(!boundary_.error().empty()) {
++            auto error=classify_fs_error(EINVAL,"boundaryManifest",save_path_);
++            complete([handler=std::move(handler),error]() mutable {if(handler) handler(error,{});});return;
++        }
+         const auto n = files_.num_pieces();
+         const bool trust = trusted.size() == n;
+         Bitfield have(n, false);
+@@ -241,4 +252,15 @@ void ThreadedDiskIo::async_check_files_detailed(Bitfield trusted, DiskCheckProgr
+     });
+ }
+ 
+-} // namespace librats::bittorrent
+\ No newline at end of file
++void ThreadedDiskIo::apply_file_selection(std::vector<int> priorities,std::uint64_t revision,std::function<void(DiskError)> handler) {
++    enqueue([this,priorities=std::move(priorities),revision,handler=std::move(handler)]() mutable {
++        clear_file_error();
++        const bool ok=boundary_.apply_selection_change(priorities,revision);
++        auto error=disk_error(ok);
++        if(!ok && !error) error=classify_fs_error(EINVAL,"fileSelection",save_path_);
++        std::fill(ensured_.begin(),ensured_.end(),0);
++        complete([handler=std::move(handler),error]() mutable {if(handler) handler(error);});
++    },true);
++}
++
++} // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/disk_io.h b/src/librats/bittorrent/disk_io.h
+index 0279a83..f442ffc 100644
+--- a/src/librats/bittorrent/disk_io.h
++++ b/src/librats/bittorrent/disk_io.h
+@@ -1,4 +1,5 @@
+ #pragma once
++#include "librats/bittorrent/boundary_store.h"
+ 
+ /**
+  * @file disk_io.h
+@@ -51,6 +52,11 @@ using DiskCheckHandler    = std::function<void(Bitfield have)>;
+ 
+ class DiskIo {
+ public:
++    virtual void apply_file_selection(std::vector<int>,std::uint64_t,std::function<void(DiskError)> done) {
++        done(classify_fs_error(ENOTSUP,"selection",""));
++    }
++    virtual std::vector<int> file_priorities() const {return {};}
++    virtual std::uint64_t selection_revision() const {return 0;}
+     virtual ~DiskIo() = default;
+ 
+     // Detailed variants preserve the legacy virtual interface and existing
+@@ -147,9 +153,12 @@ public:
+                            DiskCheckHandler handler) override;
+     std::size_t queued_write_bytes() const noexcept override { return queued_bytes_.load(std::memory_order_relaxed); }
+     void stop() override;
++    void apply_file_selection(std::vector<int>,std::uint64_t,std::function<void(DiskError)>) override;
++    std::vector<int> file_priorities() const override {return boundary_.priorities();}
++    std::uint64_t selection_revision() const override {return boundary_.revision();}
+ 
+ private:
+-    void enqueue(std::function<void()> job);
++    void enqueue(std::function<void()> job,bool barrier=false);
+     void worker_loop();
+     void complete(std::function<void()> handler);
+ 
+@@ -164,6 +173,7 @@ private:
+     std::string file_path(std::size_t file_index) const;
+ 
+     FileStorage      files_;
++    BoundaryStore boundary_;
+     Bytes            piece_hashes_;   ///< concatenated 20-byte SHA-1s
+     std::string      save_path_;
+     CompletionPoster poster_;
+@@ -178,7 +188,10 @@ private:
+ 
+     // Worker pool + job queue.
+     std::vector<std::thread>          workers_;
+-    std::queue<std::function<void()>> jobs_;
++    struct Job {std::function<void()> run;bool barrier;};
++    std::queue<Job> jobs_;
++    std::size_t active_jobs_=0;
++    bool barrier_active_=false;
+     std::mutex                        mutex_;
+     std::condition_variable           cv_;
+     bool                              stopping_ = false;
+diff --git a/src/librats/bittorrent/file_selection.h b/src/librats/bittorrent/file_selection.h
+new file mode 100644
+index 0000000..ee787f1
+--- /dev/null
++++ b/src/librats/bittorrent/file_selection.h
+@@ -0,0 +1,53 @@
++#pragma once
++#include "librats/bittorrent/file_storage.h"
++#include "librats/bittorrent/piece_picker.h"
++#include <algorithm>
++#include <string>
++#include <set>
++#include <cctype>
++
++namespace librats::bittorrent {
++// File indices always refer to the original metadata order, never tree order.
++class FileSelection {
++public:
++    static std::string validate(const FileStorage& files,const std::vector<int>& priorities) {
++        if(priorities.size()!=files.num_files()) return "File priority count does not match metadata";
++        for(int p:priorities) if(p<0 || p>2) return "File priority must be 0, 1 or 2";
++#ifdef _WIN32
++        std::set<std::string> paths;
++        for(std::size_t i=0;i<priorities.size();++i) if(priorities[i]) {
++            auto path=files.file_at(i).path;std::string component;
++            for(std::size_t j=0;j<=path.size();++j) {
++                if(j<path.size() && path[j]!='/') {const unsigned char c=path[j];
++                    if(c<32 || c=='<' || c=='>' || c==':' || c=='"' || c=='\\' || c=='|' || c=='?' || c=='*') return "Invalid Windows file name";
++                    component+=char(c);continue;}
++                if(component.empty() || component.back()=='.' || component.back()==' ') return "Invalid Windows path component";
++                std::string base=component.substr(0,component.find('.'));for(auto& c:base)c=char(std::toupper(static_cast<unsigned char>(c)));
++                if(base=="CON" || base=="PRN" || base=="AUX" || base=="NUL" || (base.size()==4 && (base.substr(0,3)=="COM" || base.substr(0,3)=="LPT") && base[3]>='1' && base[3]<='9'))return "Reserved Windows file name";
++                component.clear();
++            }
++            for(auto& c:path)if(static_cast<unsigned char>(c)<128)c=char(std::tolower(static_cast<unsigned char>(c)));
++            if(!paths.insert(path).second)return "Conflicting Windows file paths";
++        }
++#endif
++        return {};
++    }
++    static std::vector<PiecePriority> build_piece_priorities(const FileStorage& files,const std::vector<int>& priorities) {
++        std::vector<PiecePriority> result(files.num_pieces(),PiecePriority::DontDownload);
++        for(std::size_t i=0;i<priorities.size();++i) {
++            const auto& f=files.file_at(i); if(!priorities[i] || !f.size) continue;
++            const auto first=std::uint64_t(f.offset)/files.piece_length();
++            const auto last=std::uint64_t(f.offset+f.size-1)/files.piece_length();
++            for(auto p=first;p<=last;++p) result[p]=PiecePriority((std::max)(int(result[p]),priorities[i]));
++        }
++        return result;
++    }
++    static std::uint64_t wanted_size(const FileStorage& files,const std::vector<int>& priorities) {
++        std::uint64_t n=0;for(std::size_t i=0;i<priorities.size();++i) if(priorities[i]) n+=files.file_at(i).size;return n;
++    }
++    static std::uint64_t wanted_verified(const std::vector<std::uint64_t>& verified,const std::vector<int>& priorities) {
++        std::uint64_t n=0;for(std::size_t i=0;i<priorities.size() && i<verified.size();++i) if(priorities[i]) n+=verified[i];return n;
++    }
++    static bool any_selected(const std::vector<int>& priorities) {return std::any_of(priorities.begin(),priorities.end(),[](int p){return p!=0;});}
++};
++}
+diff --git a/src/librats/bittorrent/piece_picker.h b/src/librats/bittorrent/piece_picker.h
+index 67f1a04..83eaaf8 100644
+--- a/src/librats/bittorrent/piece_picker.h
++++ b/src/librats/bittorrent/piece_picker.h
+@@ -76,6 +76,8 @@ public:
+     bool          have_piece(std::uint32_t piece) const noexcept { return have_.get(piece); }
+     std::uint32_t num_have() const noexcept { return num_have_; }
+     bool          is_finished() const noexcept { return pieces_left_ == 0; }
++    bool wanted_complete() const noexcept {return pieces_left_==0;}
++    bool all_pieces_complete() const noexcept {return num_have_==num_pieces_;}
+     Bitfield      have_bitfield() const { return have_; }
+     void          set_have_bitfield(const Bitfield& have);
+ 
+diff --git a/src/librats/bittorrent/resume_data.cpp b/src/librats/bittorrent/resume_data.cpp
+index 927baa4..3dc761f 100644
+--- a/src/librats/bittorrent/resume_data.cpp
++++ b/src/librats/bittorrent/resume_data.cpp
+@@ -27,6 +27,10 @@ Bytes ResumeData::encode() const {
+     d["downloaded"] = librats::BencodeValue(std::int64_t(total_downloaded));
+     if (!info_dict.empty())
+         d["info"] = librats::BencodeValue(std::string(reinterpret_cast<const char*>(info_dict.data()), info_dict.size()));
++    if(!file_priorities.empty()) {
++        std::string priorities;for(int p:file_priorities) priorities.push_back(char(p));
++        d["file-priorities"]=BencodeValue(priorities);d["selection-revision"]=BencodeValue(std::int64_t(selection_revision));
++    }
+     return d.encode();
+ }
+ 
+@@ -38,6 +42,12 @@ std::optional<ResumeData> ResumeData::decode(const Bytes& data) {
+         if (!fmt || !fmt->is_string() || fmt->as_string() != kFormatTag) return std::nullopt;
+ 
+         ResumeData rd;
++        if(const auto* p=find(d,"file-priorities")) {
++            const auto* revision=find(d,"selection-revision");
++            if(!p->is_string() || !revision || !revision->is_integer() || revision->as_integer()<0 || revision->as_integer()>9007199254740991LL) return std::nullopt;
++            for(unsigned char value:p->as_string()) {if(value>2) return std::nullopt;rd.file_priorities.push_back(value);}
++            rd.selection_revision=revision->as_integer();
++        }
+         if (const auto* ih = find(d, "info-hash"); ih && ih->is_string() && ih->as_string().size() == 20)
+             std::memcpy(rd.info_hash.data(), ih->as_string().data(), 20);
+         if (const auto* n = find(d, "name"); n && n->is_string()) rd.name = n->as_string();
+diff --git a/src/librats/bittorrent/resume_data.h b/src/librats/bittorrent/resume_data.h
+index d8f0fba..f17951e 100644
+--- a/src/librats/bittorrent/resume_data.h
++++ b/src/librats/bittorrent/resume_data.h
+@@ -31,6 +31,8 @@ struct RATS_API ResumeData {
+     std::uint64_t total_uploaded   = 0;
+     std::uint64_t total_downloaded = 0;
+     Bytes         info_dict;             ///< optional verbatim info section
++    std::vector<int> file_priorities;
++    std::uint64_t selection_revision=0;
+ 
+     /// Serialise to the on-disk bencoded form.
+     Bytes encode() const;
+diff --git a/src/librats/bittorrent/torrent.cpp b/src/librats/bittorrent/torrent.cpp
+index bf6c092..3332aea 100644
+--- a/src/librats/bittorrent/torrent.cpp
++++ b/src/librats/bittorrent/torrent.cpp
+@@ -42,7 +42,7 @@ bool Torrent::start_content() {
+     content_allowed_ = true;
+     if (!running_) start();
+     if (paused_) resume();
+-    if (state_ == State::Waiting && !check_pending_) state_ = is_complete() ? State::Seeding : State::Downloading;
++    if (state_ == State::Waiting && !check_pending_) state_ = full_complete() ? State::Seeding : selected_complete() ? State::PartialSeeding : State::Downloading;
+     for (auto* peer : std::vector<PeerConnection*>(peers_)) if (alive(peer) && picker_) update_interest(*peer);
+     try_connect();
+     return true;
+@@ -92,8 +92,9 @@ void Torrent::rebuild_verified_state(const Bitfield& have) {
+ 
+ void Torrent::on_io_check_complete(DiskError error, Bitfield have) {
+     if (!running_ || last_error_) return;
+-    if (error) { rebuild_verified_state(have); fail_io(std::move(error)); return; }
++    if (error) { rebuild_verified_state(have); fail_io(error);if(check_operation_) {auto done=std::move(check_operation_);done(error);}return; }
+     on_check_complete(std::move(have));
++    if(check_operation_) {auto done=std::move(check_operation_);done({});}
+ }
+ 
+ std::vector<std::uint64_t> Torrent::file_verified_bytes() const {
+@@ -114,6 +115,7 @@ void Torrent::start() {
+         disk_   = std::make_unique<ThreadedDiskIo>(
+             info_, save_path_,
+             [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
++        configure_storage();
+         state_ = State::Checking;
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " \"" << info_.name() << "\" → Checking ("
+                                << info_.num_pieces() << " pieces, " << info_.total_size() << " bytes)");
+@@ -179,7 +181,8 @@ void Torrent::on_check_complete(Bitfield have) {
+     rebuild_verified_state(have);
+ 
+     if (!content_allowed_)      { state_ = State::Waiting; }
+-    else if (picker_->is_finished()) { state_ = State::Seeding; completed_announced_ = true; }
++    else if (full_complete()) { state_ = State::Seeding; completed_announced_ = true; }
++    else if (selected_complete()) {state_=State::PartialSeeding;}
+     else                        { state_ = content_allowed_ ? State::Downloading : State::Waiting; }
+ 
+     // A peer that connected while the check was still running was handed an EMPTY
+@@ -294,7 +297,7 @@ void Torrent::schedule_tick() {
+ void Torrent::tick() {
+     if (!running_) return;
+     ++tick_count_;
+-    if (check_pending_ && !paused_) begin_check();
++    if (check_pending_) begin_check();
+     if (check_pending_) { schedule_tick(); return; }
+     refill_all();
+ 
+@@ -418,7 +421,7 @@ void Torrent::update_interest(PeerConnection& pc) {
+ }
+ 
+ void Torrent::refill(PeerConnection& pc) {
+-    if (!running_ || paused_ || last_error_ || !content_allowed_ || state_ == State::Checking || io_retry_timer_ != kInvalidTimerId || !picker_ || pc.peer_choking() || !pc.am_interested()) return;
++    if (!running_ || paused_ || last_error_ || selection_applying_ || !content_allowed_ || state_ == State::Checking || io_retry_timer_ != kInvalidTimerId || !picker_ || pc.peer_choking() || !pc.am_interested()) return;
+     // Disk backpressure: while too many writes are still pending, stop requesting
+     // new blocks so the write queue can drain (D-2). on_block_written() resumes
+     // requesting once it falls back under the watermark.
+@@ -457,7 +460,7 @@ void Torrent::refill(PeerConnection& pc) {
+ 
+ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t offset, ByteView data) {
+     release_block(&pc,piece,offset);
+-    if (!running_ || paused_ || last_error_ || !content_allowed_ || !picker_ || piece >= info_.num_pieces()) return;
++    if (!running_ || paused_ || last_error_ || selection_applying_ || !content_allowed_ || !picker_ || piece >= info_.num_pieces() || picker_->piece_priority(piece)==PiecePriority::DontDownload) return;
+ 
+     // Reject a malformed or unsolicited block before it can index the picker's
+     // block vector out of bounds: the offset must be block-aligned and inside the
+@@ -505,7 +508,8 @@ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t of
+         opc->send_cancel(piece, block.block * kBlockSize, picker_->block_size(piece, block.block));
+     }
+ 
+-    disk_->async_write_detailed(piece, offset, data.to_bytes(), [this, block](DiskError error) {
++    disk_->async_write_detailed(piece, offset, data.to_bytes(), [this, block,version=selection_generation_](DiskError error) {
++        if(version!=selection_generation_) return;
+         if (!running_ || last_error_) return;
+         if (error) { schedule_io_retry(block.piece, error); return; }
+         on_block_written(block, true);
+@@ -569,7 +573,8 @@ void Torrent::refill_all() {
+ }
+ 
+ void Torrent::verify_piece(std::uint32_t piece) {
+-    disk_->async_hash_detailed(piece, [this, piece](DiskError error, std::array<std::uint8_t, 20> hash) {
++    disk_->async_hash_detailed(piece, [this, piece,version=selection_generation_](DiskError error, std::array<std::uint8_t, 20> hash) {
++        if(version!=selection_generation_) return;
+         if (!running_ || last_error_) return;
+         if (error) { schedule_io_retry(piece, error); return; }
+         on_piece_hashed(piece, true, hash);
+@@ -609,7 +614,8 @@ void Torrent::on_piece_hashed(std::uint32_t piece, bool ok, std::array<std::uint
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " progress " << (progress_logged_ * 10) << '%');
+     }
+ 
+-    if (picker_->is_finished() && !completed_announced_) {
++    if(selected_complete() && !full_complete()) state_=State::PartialSeeding;
++    if (full_complete() && !completed_announced_) {
+         completed_announced_ = true;
+         state_ = State::Seeding;
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " ✓ download complete → Seeding");
+@@ -628,8 +634,8 @@ void Torrent::on_request(PeerConnection& pc, std::uint32_t piece, std::uint32_t
+     if (offset >= piece_bytes || length > piece_bytes - offset) return;
+ 
+     PeerConnection* peer = &pc;
+-    disk_->async_read_detailed(piece, offset, length, [this, peer, piece, offset](DiskError error, Bytes data) {
+-        if (!running_ || last_error_) return;
++    disk_->async_read_detailed(piece, offset, length, [this, peer, piece, offset,version=selection_generation_](DiskError error, Bytes data) {
++        if (!running_ || last_error_ || version!=selection_generation_) return;
+         if (error) { fail_io(error); return; }
+         if (!paused_ && content_allowed_ && alive(peer)) {
+             const std::size_t sent = data.size();  // data is about to be moved away
+@@ -671,7 +677,7 @@ void Torrent::recompute_choker() {
+     // is bytes received (tit-for-tat); while seeding we receive nothing, so score
+     // by bytes we served them instead — otherwise every peer scores 0 and a seed
+     // would serve only whichever peers happened to connect first, forever (H2).
+-    const bool seeding = picker_ && picker_->is_finished();
++    const bool seeding = selected_complete();
+     std::vector<Choker::Candidate> candidates;
+     for (PeerConnection* pc : peers_)
+         if (pc->peer_interested())
+@@ -736,8 +742,8 @@ std::size_t Torrent::num_outstanding_requests() const noexcept {
+ }
+ 
+ double Torrent::progress() const {
+-    if (!picker_ || info_.total_size() == 0) return 0.0;
+-    return double(verified_bytes_) / double(info_.total_size());
++    if(!picker_ || !FileSelection::any_selected(file_priorities_)) return 0;
++    const auto wanted=wanted_bytes();return wanted?double(wanted_verified_bytes())/double(wanted):1.0;
+ }
+ 
+ // ---- extension protocol / metadata (BEP 10 / BEP 9) ----
+@@ -851,6 +857,7 @@ void Torrent::promote_to_downloading() {
+     picker_ = std::make_unique<PiecePicker>(info_.num_pieces(), info_.piece_length(), info_.total_size());
+     disk_   = std::make_unique<ThreadedDiskIo>(
+         info_, save_path_, [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
++    configure_storage();
+     state_ = State::Checking;
+ 
+     // Adopt the bitfields we received while metadata-less and (re)evaluate interest.
+@@ -869,7 +876,7 @@ void Torrent::begin_check() {
+     check_pending_ = false;
+     state_ = State::Checking;
+     disk_->async_check_files_detailed(resume_have_, nullptr,
+-        [this,slot=std::move(slot)](DiskError error, Bitfield have) { on_io_check_complete(error,std::move(have)); });
++        [this,slot=std::move(slot),version=selection_generation_](DiskError error, Bitfield have) { if(version==selection_generation_) on_io_check_complete(error,std::move(have)); });
+ }
+ 
+ void Torrent::release_block(PeerConnection* pc, std::uint32_t piece, std::uint32_t offset) {
+@@ -994,6 +1001,14 @@ void Torrent::load_resume_data(const ResumeData& rd) {
+     has_metadata_ = info_.has_metadata();
+     if (!is_all_zero(rd.info_hash) && rd.info_hash != info_hash()) return;  // not ours
+     resume_have_     = rd.have;
++    if(!rd.file_priorities.empty()) {
++        file_priorities_=rd.file_priorities;selection_revision_=rd.selection_revision;
++        if(has_metadata_ && !FileSelection::validate(info_.files(),file_priorities_).empty()) {
++            last_error_=classify_fs_error(EINVAL,"resumeSelection",save_path_);return;
++        }
++        // Sidecar presence and selected final files must be verified, not trusted.
++        if(selection_revision_ || std::find(file_priorities_.begin(),file_priorities_.end(),0)!=file_priorities_.end()) resume_have_={};
++    }
+     bytes_uploaded_  = rd.total_uploaded;
+     bytes_downloaded_ = rd.total_downloaded;
+ }
+@@ -1019,6 +1034,7 @@ ResumeData Torrent::generate_resume_data() const {
+     rd.have             = picker_ ? picker_->have_bitfield() : Bitfield{};
+     rd.total_uploaded   = bytes_uploaded_;
+     rd.total_downloaded = bytes_downloaded_;
++    rd.file_priorities=file_priorities_;rd.selection_revision=selection_revision_;
+     if (info_.has_metadata()) rd.info_dict = info_.info_dict_bytes();
+     return rd;
+ }
+@@ -1038,4 +1054,45 @@ bool Torrent::save_resume_data(const std::string& path) const {
+     return create_file_binary(path.c_str(), data.data(), data.size());
+ }
+ 
++void Torrent::apply_piece_priorities() {
++    if(!picker_ || file_priorities_.size()!=info_.num_files()) return;
++    const auto priorities=FileSelection::build_piece_priorities(info_.files(),file_priorities_);
++    for(std::uint32_t p=0;p<priorities.size();++p) picker_->set_piece_priority(p,priorities[p]);
++}
++void Torrent::configure_storage() {
++    if(file_priorities_.size()!=info_.num_files()) file_priorities_.assign(info_.num_files(),1);
++    const auto diskPriorities=disk_->file_priorities();
++    if(!diskPriorities.empty() && disk_->selection_revision()>=selection_revision_) {
++        file_priorities_=diskPriorities;selection_revision_=disk_->selection_revision();
++    } else if(!diskPriorities.empty()) {
++        disk_->apply_file_selection(file_priorities_,selection_revision_,[this](DiskError error){if(error) fail_io(error);});
++    }
++    apply_piece_priorities();
++}
++void Torrent::set_file_priorities(std::vector<int> priorities,std::uint64_t revision,std::function<void(DiskError)> done) {
++    if(!has_metadata_ || !disk_ || selection_applying_ || last_error_ || !FileSelection::validate(info_.files(),priorities).empty()) {
++        done(classify_fs_error(EINVAL,"fileSelection",save_path_));return;
++    }
++    const bool allowed=content_allowed_;
++    pause();selection_applying_=true;++selection_generation_;
++    disk_->apply_file_selection(priorities,revision,[this,priorities,revision,allowed,done=std::move(done)](DiskError error) mutable {
++        selection_applying_=false;
++        if(error) {fail_io(error);done(error);return;}
++        file_priorities_=std::move(priorities);selection_revision_=revision;
++        picker_=std::make_unique<PiecePicker>(info_.num_pieces(),info_.piece_length(),info_.total_size());
++        apply_piece_priorities();verified_bytes_=0;verified_file_bytes_.assign(info_.num_files(),0);resume_have_={};
++        content_allowed_=allowed && FileSelection::any_selected(file_priorities_);
++        completed_announced_=false;check_pending_=true;begin_check();
++        done({});
++    });
++}
++void Torrent::recheck(std::function<void(DiskError)> done,bool retry) {
++    if(!has_metadata_ || !disk_ || selection_applying_ || (last_error_ && !retry)) {
++        done(classify_fs_error(EINVAL,"recheck",save_path_));return;
++    }
++    if(retry) clear_error();
++    set_file_priorities(file_priorities_,selection_revision_,[this,done=std::move(done)](DiskError error) mutable {
++        if(error) done(error);else check_operation_=std::move(done);
++    });
++}
+ } // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/torrent.h b/src/librats/bittorrent/torrent.h
+index 3e294d9..f11c676 100644
+--- a/src/librats/bittorrent/torrent.h
++++ b/src/librats/bittorrent/torrent.h
+@@ -76,7 +76,7 @@ public:
+ 
+ class RATS_API Torrent final : public PeerConnection::Observer {
+ public:
+-    enum class State { Stopped, Metadata, Checking, Downloading, Seeding, Waiting, Error };
++    enum class State { Stopped, Metadata, Checking, Downloading, Seeding, Waiting, Error, PartialSeeding };
+ 
+     Torrent(Reactor& reactor, TorrentHost& host, TorrentInfo info, std::string save_path);
+     ~Torrent() override;
+@@ -92,6 +92,14 @@ public:
+     bool content_allowed() const noexcept { return content_allowed_; }
+     void verify_resume_on_start() { resume_have_ = {}; }
+     void begin_check();
++    void set_file_priorities(std::vector<int>,std::uint64_t,std::function<void(DiskError)>);
++    void recheck(std::function<void(DiskError)>,bool retry=false);
++    const std::vector<int>& file_priorities() const {return file_priorities_;}
++    std::uint64_t selection_revision() const {return selection_revision_;}
++    std::uint64_t wanted_bytes() const {return FileSelection::wanted_size(info_.files(),file_priorities_);}
++    std::uint64_t wanted_verified_bytes() const {return FileSelection::wanted_verified(verified_file_bytes_,file_priorities_);}
++    bool selected_complete() const {return picker_ && FileSelection::any_selected(file_priorities_) && picker_->wanted_complete();}
++    bool full_complete() const {return picker_ && picker_->all_pieces_complete() && std::all_of(file_priorities_.begin(),file_priorities_.end(),[](int p){return p!=0;});}
+     void on_payload_sent(PeerConnection& peer, std::size_t bytes) override { bytes_uploaded_ += bytes; recent_up_[&peer] += bytes; }
+     bool check_pending() const { return check_pending_; }
+     void wake_bandwidth() {
+@@ -122,7 +130,7 @@ public:
+     const TorrentInfo& torrent_info()const { return info_; }
+     std::uint32_t      num_pieces()  const { return info_.num_pieces(); }
+     State              state()       const noexcept { return state_; }
+-    bool               is_complete() const { return picker_ && picker_->is_finished(); }
++    bool               is_complete() const { return full_complete(); }
+     double             progress()    const;
+     std::size_t        num_peers()   const noexcept { return peers_.size(); }
+     /// Total block requests currently in flight across all peers.
+@@ -170,6 +178,12 @@ public:
+     void on_closed(PeerConnection&, const std::string& reason) override;
+ 
+ private:
++    void configure_storage();
++    void apply_piece_priorities();
++    std::vector<int> file_priorities_;
++    std::uint64_t selection_revision_=0,selection_generation_=0;
++    bool selection_applying_=false;
++    std::function<void(DiskError)> check_operation_;
+     void clear_error();
+     void rebuild_verified_state(const Bitfield& have);
+     void on_io_check_complete(DiskError error, Bitfield have);
+diff --git a/src/librats/util/fs.cpp b/src/librats/util/fs.cpp
+index 6248107..7fb61b2 100644
+--- a/src/librats/util/fs.cpp
++++ b/src/librats/util/fs.cpp
+@@ -660,6 +660,17 @@ bool rename_file(const char* old_path, const char* new_path) {
+ #endif
+ }
+ 
++bool replace_file_atomic(const char* old_path,const char* new_path) {
++#ifdef _WIN32
++    const auto from=wide_path(old_path),to=wide_path(new_path);
++    const bool ok=!from.empty() && !to.empty() && MoveFileExW(from.c_str(),to.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
++    if(!ok) { const auto code=GetLastError();errno=code==ERROR_ACCESS_DENIED?EACCES:code==ERROR_DISK_FULL?ENOSPC:
++        (code==ERROR_FILE_NOT_FOUND || code==ERROR_PATH_NOT_FOUND)?ENOENT:EIO;capture_fs_error("replace",new_path); } return ok;
++#else
++    const bool ok=rename(old_path,new_path)==0;if(!ok) capture_fs_error("replace",new_path);return ok;
++#endif
++}
++
+ // Path utilities
+ std::string combine_paths(const std::string& base, const std::string& relative) {
+     if (base.empty()) return relative;
+diff --git a/src/librats/util/fs.h b/src/librats/util/fs.h
+index 6d75310..625fd86 100644
+--- a/src/librats/util/fs.h
++++ b/src/librats/util/fs.h
+@@ -62,6 +62,8 @@ RATS_API bool read_file_chunk(const char* path, uint64_t offset, void* buffer, s
+ // Advanced file operations
+ RATS_API bool create_file_with_size(const char* path, uint64_t size); // Pre-allocate file space
+ RATS_API bool rename_file(const char* old_path, const char* new_path);
++// Same-filesystem atomic replacement; unlike move_file, never copy/delete fallback.
++RATS_API bool replace_file_atomic(const char* old_path, const char* new_path);
+ 
+ // A file kept open across many positioned reads/writes. Streaming a large file
+ // then costs one open()/close() instead of one per chunk (see read_file_chunk /

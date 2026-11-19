@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.16)
+project(download_benchmark LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(Qt6 REQUIRED COMPONENTS Core)
+if(NOT WIN32 OR NOT MINGW)
+    message(FATAL_ERROR "This instrumented benchmark currently targets Windows x64 MinGW")
+endif()
+foreach(setting LIBRATS_SOURCE_DIR LIBRATS_BINARY_DIR LIBRATS_ARCHIVE)
+    if(NOT DEFINED ${setting})
+        message(FATAL_ERROR "Set ${setting} to the library version being measured")
+    endif()
+    file(TO_CMAKE_PATH "${${setting}}" ${setting})
+endforeach()
+add_executable(download_benchmark download_benchmark.cpp)
+option(BENCH_ADVANCED "Enable S3 cache/window/strategy benchmark controls" OFF)
+if(BENCH_ADVANCED)
+    target_compile_definitions(download_benchmark PRIVATE BENCH_ADVANCED)
+endif()
+target_include_directories(download_benchmark PRIVATE "${LIBRATS_SOURCE_DIR}/src" "${LIBRATS_BINARY_DIR}/src")
+target_link_libraries(download_benchmark PRIVATE "${LIBRATS_ARCHIVE}" Qt6::Core ws2_32 iphlpapi bcrypt advapi32 psapi)
+# Count successful logical file writes, including one-byte preallocation. These
+# symbols are identical in the pinned baseline and current MinGW x64 builds.
+target_link_options(download_benchmark PRIVATE
+    "-Wl,--wrap=_ZN7librats16write_file_chunkEPKcyPKvy"
+    "-Wl,--wrap=_ZN7librats21create_file_with_sizeEPKcy")

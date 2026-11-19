@@ -1,0 +1,399 @@
+diff --git a/src/librats/bittorrent/client.cpp b/src/librats/bittorrent/client.cpp
+index b23b383..51642ba 100644
+--- a/src/librats/bittorrent/client.cpp
++++ b/src/librats/bittorrent/client.cpp
+@@ -52,6 +52,7 @@ void Client::stop() {
+         t->stop();
+     }
+     torrents_.clear();
++    disk_cache_->invalidate();
+     connections_.clear();
+     // Reclaim any outbound sockets still mid-connect (their completion lambda will
+     // never run now that the reactor is stopped).
+@@ -811,4 +812,11 @@ void Client::recheck_torrent(const InfoHash& hash,bool retry,FileOperationHandle
+         },retry);
+     });
+ }
++bool Client::set_download_strategy(const InfoHash& hash,DownloadStrategy strategy,RequestWindowPolicy window) {
++    bool applied=false;run_on_reactor([&]{const auto it=torrents_.find(hash);if(it!=torrents_.end())applied=it->second->set_download_strategy(strategy,window);});return applied;
++}
++std::vector<PieceRange> Client::piece_ranges(const InfoHash& hash,std::size_t maximum) {
++    std::vector<PieceRange> ranges;run_on_reactor([&]{const auto it=torrents_.find(hash);if(it!=torrents_.end())ranges=it->second->piece_ranges(maximum);});return ranges;
++}
++void Client::set_cache_budget(std::size_t bytes) {run_on_reactor([&]{disk_cache_->set_limit((std::min)(bytes,std::size_t(268435456)));});}
+ } // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/client.h b/src/librats/bittorrent/client.h
+index 53019e7..b7cbdfc 100644
+--- a/src/librats/bittorrent/client.h
++++ b/src/librats/bittorrent/client.h
+@@ -133,6 +133,11 @@ public:
+     using FileOperationHandler=std::function<void(DiskError,std::uint64_t)>;
+     void set_file_priorities(const InfoHash&,std::vector<int>,std::uint64_t expected,FileOperationHandler);
+     void recheck_torrent(const InfoHash&,bool retry,FileOperationHandler);
++    bool set_download_strategy(const InfoHash&,DownloadStrategy,RequestWindowPolicy);
++    std::vector<PieceRange> piece_ranges(const InfoHash&,std::size_t maximum=256);
++    void set_cache_budget(std::size_t bytes);
++    std::size_t cache_bytes() const {return disk_cache_->used();}
++    std::shared_ptr<DiskCacheBudget> disk_cache_budget() override {return disk_cache_;}
+     void set_global_policy(BandwidthController::Policy policy, std::size_t connections, std::size_t taskConnections, std::size_t checking);
+     bool set_task_policy(const InfoHash& hash, BandwidthController::Policy policy, std::size_t connections);
+     bool allow_content(const InfoHash& hash, bool allowed);
+@@ -318,6 +323,7 @@ private:
+     std::unordered_map<socket_t, InfoHash> pending_hashes_;
+     std::unordered_map<socket_t,std::pair<std::string,std::uint16_t>> pending_endpoints_;
+     BandwidthController bandwidth_;
++    std::shared_ptr<DiskCacheBudget> disk_cache_=std::make_shared<DiskCacheBudget>();
+     std::map<InfoHash,FileOperationHandler> file_operations_;
+     std::size_t max_connections_ = 200, task_connections_ = 50, checking_limit_ = 1;
+     std::map<InfoHash,std::size_t> task_limits_;
+diff --git a/src/librats/bittorrent/disk_cache_budget.h b/src/librats/bittorrent/disk_cache_budget.h
+new file mode 100644
+index 0000000..63809c9
+--- /dev/null
++++ b/src/librats/bittorrent/disk_cache_budget.h
+@@ -0,0 +1,41 @@
++#pragma once
++#include "librats/core/bytes.h"
++#include <list>
++#include <mutex>
++#include <string>
++#include <unordered_map>
++#include <atomic>
++
++namespace librats::bittorrent {
++// Shared across a Client. Only immutable completed read payloads are retained.
++// In-flight write buffers remain governed separately by the existing backpressure.
++class DiskCacheBudget {
++public:
++    explicit DiskCacheBudget(std::size_t limit=0):limit_(limit),enabled_(limit!=0){}
++    bool enabled() const {return enabled_.load(std::memory_order_relaxed);}
++    void set_limit(std::size_t limit) {std::lock_guard<std::mutex> lock(mutex_);limit_=limit;enabled_=limit!=0;evict();}
++    std::size_t used() const {std::lock_guard<std::mutex> lock(mutex_);return used_;}
++    bool acquire(const std::string& key,Bytes& out,std::uint64_t& generation) {
++        std::lock_guard<std::mutex> lock(mutex_);generation=generation_;auto it=items_.find(key);if(it==items_.end())return false;
++        lru_.splice(lru_.begin(),lru_,it->second.position);out=it->second.bytes;return true;
++    }
++    void release(const std::string& key,Bytes bytes,std::uint64_t generation) {
++        std::lock_guard<std::mutex> lock(mutex_);if(generation!=generation_ || bytes.size()>limit_ || limit_==0)return;
++        auto it=items_.find(key);if(it!=items_.end()){used_-=it->second.bytes.size();lru_.erase(it->second.position);items_.erase(it);}
++        // Evict before insertion so retained bytes never exceed the hard budget.
++        while(!lru_.empty() && (used_>limit_-bytes.size() || items_.size()>=4096))erase_oldest();
++        lru_.push_front(key);used_+=bytes.size();items_.emplace(key,Entry{std::move(bytes),lru_.begin()});
++    }
++    void invalidate() {std::lock_guard<std::mutex> lock(mutex_);++generation_;items_.clear();lru_.clear();used_=0;}
++private:
++    struct Entry {Bytes bytes;std::list<std::string>::iterator position;};
++    void erase_oldest(){auto it=items_.find(lru_.back());used_-=it->second.bytes.size();items_.erase(it);lru_.pop_back();}
++    void evict(){while(used_>limit_ && !lru_.empty())erase_oldest();}
++    mutable std::mutex mutex_;
++    std::size_t limit_=0,used_=0;
++    std::atomic<bool> enabled_{false};
++    std::uint64_t generation_=0;
++    std::list<std::string> lru_;
++    std::unordered_map<std::string,Entry> items_;
++};
++}
+diff --git a/src/librats/bittorrent/disk_io.cpp b/src/librats/bittorrent/disk_io.cpp
+index 37f0665..487140c 100644
+--- a/src/librats/bittorrent/disk_io.cpp
++++ b/src/librats/bittorrent/disk_io.cpp
+@@ -24,6 +24,8 @@ ThreadedDiskIo::ThreadedDiskIo(const TorrentInfo& info, std::string save_path,
+     , piece_hashes_(info.piece_hashes())
+     , save_path_(std::move(save_path))
+     , poster_(std::move(poster))
++    , cache_(std::move(config.cache))
++    , cache_scope_(save_path_+"|"+info.info_hash_hex()+"|")
+     , ensured_(info.num_files(), 0) {
+     const int n = (std::max)(1, config.num_threads);
+     workers_.reserve(std::size_t(n));
+@@ -184,8 +186,15 @@ void ThreadedDiskIo::async_read_detailed(std::uint32_t piece, std::uint32_t offs
+     enqueue([this, piece, offset, length, handler = std::move(handler)]() mutable {
+         clear_file_error();
+         Bytes out;
++        const bool caching=cache_ && cache_->enabled();
++        const auto key=caching?cache_scope_+std::to_string(piece)+":"+std::to_string(offset)+":"+std::to_string(length):std::string{};
++        std::uint64_t generation=0;
++        if(caching && cache_->acquire(key,out,generation)) {
++            complete([handler=std::move(handler),out=std::move(out)]() mutable {if(handler)handler({},std::move(out));});return;
++        }
+         const bool ok = read_range(piece, offset, length, out, true, false);
+         auto error = disk_error(ok);
++        if(ok && caching)cache_->release(key,out,generation);
+         complete([handler = std::move(handler), error, out = std::move(out)]() mutable {
+             if (handler) handler(error, std::move(out));
+         });
+@@ -199,7 +208,9 @@ void ThreadedDiskIo::async_write_detailed(std::uint32_t piece, std::uint32_t off
+     queued_bytes_.fetch_add(size, std::memory_order_relaxed);
+     enqueue([this, piece, offset, size, data = std::move(data), handler = std::move(handler)]() mutable {
+         clear_file_error();
++        if(cache_ && cache_->enabled())cache_->invalidate();
+         const bool ok = write_range(piece, offset, data);
++        if(cache_ && cache_->enabled())cache_->invalidate();
+         auto error = disk_error(ok);
+         store_.erase(piece, offset);
+         queued_bytes_.fetch_sub(size, std::memory_order_relaxed);
+@@ -223,6 +234,7 @@ void ThreadedDiskIo::async_hash_detailed(std::uint32_t piece,
+ void ThreadedDiskIo::async_check_files_detailed(Bitfield trusted, DiskCheckProgress progress,
+     std::function<void(DiskError, Bitfield)> handler) {
+     enqueue([this, trusted = std::move(trusted), progress = std::move(progress), handler = std::move(handler)]() mutable {
++        if(cache_ && cache_->enabled())cache_->invalidate();
+         if(!boundary_.error().empty()) {
+             auto error=classify_fs_error(EINVAL,"boundaryManifest",save_path_);
+             complete([handler=std::move(handler),error]() mutable {if(handler) handler(error,{});});return;
+@@ -254,6 +266,7 @@ void ThreadedDiskIo::async_check_files_detailed(Bitfield trusted, DiskCheckProgr
+ 
+ void ThreadedDiskIo::apply_file_selection(std::vector<int> priorities,std::uint64_t revision,std::function<void(DiskError)> handler) {
+     enqueue([this,priorities=std::move(priorities),revision,handler=std::move(handler)]() mutable {
++        if(cache_ && cache_->enabled())cache_->invalidate();
+         clear_file_error();
+         const bool ok=boundary_.apply_selection_change(priorities,revision);
+         auto error=disk_error(ok);
+diff --git a/src/librats/bittorrent/disk_io.h b/src/librats/bittorrent/disk_io.h
+index f442ffc..8b0e601 100644
+--- a/src/librats/bittorrent/disk_io.h
++++ b/src/librats/bittorrent/disk_io.h
+@@ -1,5 +1,7 @@
+ #pragma once
+ #include "librats/bittorrent/boundary_store.h"
++#include "librats/bittorrent/disk_cache_budget.h"
++#include <memory>
+ 
+ /**
+  * @file disk_io.h
+@@ -118,6 +120,7 @@ class ThreadedDiskIo final : public DiskIo {
+ public:
+     struct Config {
+         int num_threads = 2;
++        std::shared_ptr<DiskCacheBudget> cache;
+     };
+ 
+     ThreadedDiskIo(const TorrentInfo& info, std::string save_path,
+@@ -180,6 +183,8 @@ private:
+     StoreBuffer      store_;
+ 
+     // File preallocation bookkeeping.
++    std::shared_ptr<DiskCacheBudget> cache_;
++    std::string cache_scope_;
+     std::mutex        ensure_mutex_;
+     std::vector<char> ensured_;       ///< per-file "already sized on disk" flag
+ 
+diff --git a/src/librats/bittorrent/download_strategy.h b/src/librats/bittorrent/download_strategy.h
+new file mode 100644
+index 0000000..79f6fa0
+--- /dev/null
++++ b/src/librats/bittorrent/download_strategy.h
+@@ -0,0 +1,24 @@
++#pragma once
++#include <algorithm>
++#include <cmath>
++#include <cstddef>
++#include <cstdint>
++#include <vector>
++
++namespace librats::bittorrent {
++enum class DownloadStrategy {RarestFirst,Sequential,FirstLast};
++struct RequestWindowPolicy {
++    bool automatic=true;
++    int manual=32,minimum=2,maximum=32;
++    bool valid() const {return manual>=1 && manual<=128 && minimum>=1 && minimum<=maximum && maximum<=128;}
++    int computeWindow(double bytesPerSecond,double rttMs,std::size_t queuedBytes=0) const {
++        if(!valid())return 1;
++        if(queuedBytes>4*1024*1024)return 0;
++        if(!automatic)return manual;
++        if(!std::isfinite(bytesPerSecond) || !std::isfinite(rttMs) || bytesPerSecond<=0 || rttMs<=0)return (std::clamp)(32,minimum,maximum);
++        const auto target=std::ceil(bytesPerSecond*(std::max)(50.0,rttMs)/1000.0*2/16384.0);
++        return int((std::clamp)(target,double(minimum),double(maximum)));
++    }
++};
++struct PieceRange {std::uint32_t begin=0,end=0,verified=0,wanted=0,active=0,high=0;};
++}
+diff --git a/src/librats/bittorrent/piece_picker.h b/src/librats/bittorrent/piece_picker.h
+index 83eaaf8..c21151d 100644
+--- a/src/librats/bittorrent/piece_picker.h
++++ b/src/librats/bittorrent/piece_picker.h
+@@ -133,6 +133,7 @@ public:
+     }
+     bool       in_endgame() const noexcept { return endgame_; }
+     std::size_t num_downloading() const noexcept { return downloading_.size(); }
++    bool piece_active(std::uint32_t piece) const {return downloading_.find(piece)!=downloading_.end();}
+ 
+ private:
+     struct Block {
+diff --git a/src/librats/bittorrent/torrent.cpp b/src/librats/bittorrent/torrent.cpp
+index 3332aea..7c0fec0 100644
+--- a/src/librats/bittorrent/torrent.cpp
++++ b/src/librats/bittorrent/torrent.cpp
+@@ -114,7 +114,7 @@ void Torrent::start() {
+         picker_ = std::make_unique<PiecePicker>(info_.num_pieces(), info_.piece_length(), info_.total_size());
+         disk_   = std::make_unique<ThreadedDiskIo>(
+             info_, save_path_,
+-            [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
++            [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); }, ThreadedDiskIo::Config{2,host_.disk_cache_budget()});
+         configure_storage();
+         state_ = State::Checking;
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " \"" << info_.name() << "\" → Checking ("
+@@ -162,7 +162,7 @@ void Torrent::stop() {
+     releasing_peers_ = false;
+     peers_.clear();
+     outstanding_.clear();
+-    recent_down_.clear();
++    recent_down_.clear(); performance_.clear();request_started_.clear();
+     seed_peers_.clear();
+     if (disk_) disk_->stop();
+     disk_.reset();
+@@ -240,7 +240,7 @@ void Torrent::pause() {
+     peers_.clear();
+     outstanding_.clear();
+     request_time_.clear();
+-    recent_down_.clear();
++    recent_down_.clear(); performance_.clear();request_started_.clear();
+     recent_up_.clear();
+     seed_peers_.clear();
+     peer_ext_.clear();
+@@ -426,7 +426,8 @@ void Torrent::refill(PeerConnection& pc) {
+     // new blocks so the write queue can drain (D-2). on_block_written() resumes
+     // requesting once it falls back under the watermark.
+     if (disk_ && disk_->queued_write_bytes() > kDiskWriteHighWater) { write_stalled_ = true; return; }
+-    int budget = kPipelineDepth - outstanding_[&pc];
++    const auto& sample=performance_[&pc];
++    int budget = window_.computeWindow(sample.rate,sample.rtt,disk_?disk_->queued_write_bytes():0) - outstanding_[&pc];
+     if (budget <= 0) return;
+ 
+     const int before = outstanding_[&pc];
+@@ -442,6 +443,7 @@ void Torrent::refill(PeerConnection& pc) {
+             }
+             reservations_[&pc][(std::uint64_t(b.piece)<<32) | (b.block*kBlockSize)] = length;
+         }
++        request_started_[&pc][(std::uint64_t(b.piece)<<32)|(b.block*kBlockSize)]=std::chrono::steady_clock::now();
+         picker_->mark_requested(b, &pc);
+         pc.send_request(b.piece, b.block * kBlockSize, picker_->block_size(b.piece, b.block));
+         if (!alive(&pc)) break;
+@@ -459,6 +461,17 @@ void Torrent::refill(PeerConnection& pc) {
+ }
+ 
+ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t offset, ByteView data) {
++    const auto delivered=std::chrono::steady_clock::now();
++    const auto started=request_started_.find(&pc);
++    if(started!=request_started_.end())if(auto sent=started->second.find((std::uint64_t(piece)<<32)|offset);sent!=started->second.end()) {
++        auto& sample=performance_[&pc];
++        const double latency=std::chrono::duration<double,std::milli>(delivered-sent->second).count();
++        if(latency>0)sample.rtt=sample.rtt>0?0.875*sample.rtt+0.125*latency:latency;
++        if(sample.last.time_since_epoch().count()) {
++            const double seconds=std::chrono::duration<double>(delivered-sample.last).count();
++            if(seconds>0){const double rate=data.size()/(std::max)(0.0001,seconds);sample.rate=sample.rate>0?0.875*sample.rate+0.125*rate:rate;}
++        }sample.last=delivered;
++    }
+     release_block(&pc,piece,offset);
+     if (!running_ || paused_ || last_error_ || selection_applying_ || !content_allowed_ || !picker_ || piece >= info_.num_pieces() || picker_->piece_priority(piece)==PiecePriority::DontDownload) return;
+ 
+@@ -729,7 +742,7 @@ void Torrent::remove_peer(PeerConnection* pc) {
+     peers_.erase(it);
+     outstanding_.erase(pc);
+     request_time_.erase(pc);
+-    recent_down_.erase(pc);
++    recent_down_.erase(pc); performance_.erase(pc);
+     recent_up_.erase(pc);
+     peer_ext_.erase(pc);
+     pex_last_tick_.erase(pc);
+@@ -856,7 +869,7 @@ void Torrent::try_complete_metadata() {
+ void Torrent::promote_to_downloading() {
+     picker_ = std::make_unique<PiecePicker>(info_.num_pieces(), info_.piece_length(), info_.total_size());
+     disk_   = std::make_unique<ThreadedDiskIo>(
+-        info_, save_path_, [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
++        info_, save_path_, [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); }, ThreadedDiskIo::Config{2,host_.disk_cache_budget()});
+     configure_storage();
+     state_ = State::Checking;
+ 
+@@ -880,6 +893,7 @@ void Torrent::begin_check() {
+ }
+ 
+ void Torrent::release_block(PeerConnection* pc, std::uint32_t piece, std::uint32_t offset) {
++    if(auto it=request_started_.find(pc);it!=request_started_.end())it->second.erase((std::uint64_t(piece)<<32)|offset);
+     auto p=reservations_.find(pc); if(p==reservations_.end()) return;
+     auto b=p->second.find((std::uint64_t(piece)<<32)|offset); if(b==p->second.end()) return;
+     if(auto* bw=host_.bandwidth_controller()) bw->release_reservation(info_hash(),b->second);
+@@ -887,6 +901,7 @@ void Torrent::release_block(PeerConnection* pc, std::uint32_t piece, std::uint32
+ }
+ 
+ void Torrent::release_requests(PeerConnection* pc) {
++    request_started_.erase(pc);
+     auto p=reservations_.find(pc); if(p==reservations_.end()) return;
+     if(auto* bw=host_.bandwidth_controller()) for(auto [key,size]:p->second) bw->release_reservation(info_hash(),size);
+     reservations_.erase(p);
+@@ -1056,7 +1071,13 @@ bool Torrent::save_resume_data(const std::string& path) const {
+ 
+ void Torrent::apply_piece_priorities() {
+     if(!picker_ || file_priorities_.size()!=info_.num_files()) return;
+-    const auto priorities=FileSelection::build_piece_priorities(info_.files(),file_priorities_);
++    auto priorities=FileSelection::build_piece_priorities(info_.files(),file_priorities_);
++    picker_->set_mode(strategy_==DownloadStrategy::Sequential?PickMode::Sequential:PickMode::RarestFirst);
++    if(strategy_==DownloadStrategy::FirstLast)for(std::size_t i=0;i<file_priorities_.size();++i) {
++        const auto& f=info_.files().file_at(i);if(!file_priorities_[i] || !f.size)continue;
++        priorities[std::uint64_t(f.offset)/info_.piece_length()]=PiecePriority::High;
++        priorities[std::uint64_t(f.offset+f.size-1)/info_.piece_length()]=PiecePriority::High;
++    }
+     for(std::uint32_t p=0;p<priorities.size();++p) picker_->set_piece_priority(p,priorities[p]);
+ }
+ void Torrent::configure_storage() {
+@@ -1069,6 +1090,20 @@ void Torrent::configure_storage() {
+     }
+     apply_piece_priorities();
+ }
++bool Torrent::set_download_strategy(DownloadStrategy strategy,RequestWindowPolicy window) {
++    if(!window.valid() || (strategy!=DownloadStrategy::RarestFirst && strategy!=DownloadStrategy::Sequential && strategy!=DownloadStrategy::FirstLast))return false;
++    strategy_=strategy;window_=window;apply_piece_priorities();refill_all();return true;
++}
++std::vector<PieceRange> Torrent::piece_ranges(std::size_t maximum) const {
++    std::vector<PieceRange> ranges;if(!picker_ || !maximum)return ranges;
++    maximum=(std::min)(maximum,std::size_t(2048));const auto count=picker_->num_pieces();
++    const auto step=(std::max)(1u,std::uint32_t((std::uint64_t(count)+maximum-1)/maximum));
++    for(std::uint32_t begin=0;begin<count;) {
++        PieceRange range;range.begin=begin;range.end=std::uint32_t((std::min)(std::uint64_t(count),std::uint64_t(begin)+step));
++        for(auto p=begin;p<range.end;++p){range.verified+=picker_->have_piece(p);range.wanted+=picker_->piece_priority(p)!=PiecePriority::DontDownload;range.active+=picker_->piece_active(p);range.high+=picker_->piece_priority(p)==PiecePriority::High;}
++        ranges.push_back(range);begin=range.end;
++    }return ranges;
++}
+ void Torrent::set_file_priorities(std::vector<int> priorities,std::uint64_t revision,std::function<void(DiskError)> done) {
+     if(!has_metadata_ || !disk_ || selection_applying_ || last_error_ || !FileSelection::validate(info_.files(),priorities).empty()) {
+         done(classify_fs_error(EINVAL,"fileSelection",save_path_));return;
+diff --git a/src/librats/bittorrent/torrent.h b/src/librats/bittorrent/torrent.h
+index f11c676..fd633ab 100644
+--- a/src/librats/bittorrent/torrent.h
++++ b/src/librats/bittorrent/torrent.h
+@@ -23,6 +23,7 @@
+ #include "librats/util/rats_export.h"
+ #include "librats/bittorrent/choker.h"
+ #include "librats/bittorrent/disk_io.h"
++#include "librats/bittorrent/download_strategy.h"
+ #include "librats/bittorrent/extensions.h"
+ #include "librats/bittorrent/peer_connection.h"
+ #include "librats/bittorrent/peer_list.h"
+@@ -54,6 +55,7 @@ class RATS_API TorrentHost {
+ public:
+     virtual ~TorrentHost() = default;
+     virtual BandwidthController* bandwidth_controller() { return nullptr; }
++    virtual std::shared_ptr<DiskCacheBudget> disk_cache_budget() {return {};}
+     virtual std::shared_ptr<void> acquire_check_slot() { return std::make_shared<int>(0); }
+     /// Dial a peer for @p torrent. The endpoint carries the PeerList's per-peer
+     /// preferences (MSE alternation, uTP-or-TCP); the host combines them with the
+@@ -93,6 +95,8 @@ public:
+     void verify_resume_on_start() { resume_have_ = {}; }
+     void begin_check();
+     void set_file_priorities(std::vector<int>,std::uint64_t,std::function<void(DiskError)>);
++    bool set_download_strategy(DownloadStrategy,RequestWindowPolicy);
++    std::vector<PieceRange> piece_ranges(std::size_t maximum=256) const;
+     void recheck(std::function<void(DiskError)>,bool retry=false);
+     const std::vector<int>& file_priorities() const {return file_priorities_;}
+     std::uint64_t selection_revision() const {return selection_revision_;}
+@@ -181,6 +185,11 @@ private:
+     void configure_storage();
+     void apply_piece_priorities();
+     std::vector<int> file_priorities_;
++    DownloadStrategy strategy_=DownloadStrategy::RarestFirst;
++    RequestWindowPolicy window_;
++    struct PeerPerformance {double rate=0,rtt=0;std::chrono::steady_clock::time_point last{};};
++    std::unordered_map<PeerConnection*,PeerPerformance> performance_;
++    std::unordered_map<PeerConnection*,std::unordered_map<std::uint64_t,std::chrono::steady_clock::time_point>> request_started_;
+     std::uint64_t selection_revision_=0,selection_generation_=0;
+     bool selection_applying_=false;
+     std::function<void(DiskError)> check_operation_;

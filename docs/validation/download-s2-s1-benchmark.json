@@ -1,0 +1,29 @@
+{
+    "payloadBytes": 33554432,
+    "runs": [
+        {
+            "MiBps": 5.064092419686659,
+            "cpuSeconds": 1.75,
+            "elapsedMs": 6319,
+            "logicalWrittenBytes": 33554433,
+            "peakWorkingSetMiB": 104.49609375,
+            "writeAmplification": 1.0000000298023224
+        },
+        {
+            "MiBps": 5.95459620394492,
+            "cpuSeconds": 1.71875,
+            "elapsedMs": 5374,
+            "logicalWrittenBytes": 33554433,
+            "peakWorkingSetMiB": 104.49609375,
+            "writeAmplification": 1.0000000298023224
+        },
+        {
+            "MiBps": 5.665722379603399,
+            "cpuSeconds": 1.390625,
+            "elapsedMs": 5648,
+            "logicalWrittenBytes": 33554433,
+            "peakWorkingSetMiB": 104.49609375,
+            "writeAmplification": 1.0000000298023224
+        }
+    ]
+}

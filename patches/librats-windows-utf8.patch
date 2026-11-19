@@ -1,0 +1,533 @@
+diff --git a/src/librats/util/fs.cpp b/src/librats/util/fs.cpp
+index da77dd3..eb0a298 100644
+--- a/src/librats/util/fs.cpp
++++ b/src/librats/util/fs.cpp
+@@ -2,14 +2,14 @@
+ #include "librats/util/logger.h"
+ #include <cstring>
+ #include <cstdlib>
++#include <cwchar>
+ #include <sys/stat.h>
+ 
+ #ifdef _WIN32
+     #include <windows.h>
+     #include <direct.h>
+     #include <io.h>
+-    #define stat _stat
+-    #define mkdir(path, mode) _mkdir(path)
++    // Paths crossing this API are UTF-8, never the active ANSI code page.
+     #define access _access
+     #define F_OK 0
+     #define getcwd _getcwd
+@@ -23,16 +23,52 @@
+ 
+ namespace librats {
+ 
++namespace {
++#ifdef _WIN32
++// Reject invalid UTF-8 instead of silently creating a different filename.
++std::wstring wide_path(const char* path) {
++    if (!path) return {};
++    const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, nullptr, 0);
++    if (size <= 0) return {};
++    std::wstring result(static_cast<size_t>(size), L'\0');
++    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, result.data(), size)) return {};
++    result.pop_back();
++    return result;
++}
++using PathStat = struct _stat64;
++int path_stat(const char* path, PathStat* st) {
++    const auto wide = wide_path(path);
++    return wide.empty() ? -1 : _wstat64(wide.c_str(), st);
++}
++FILE* path_fopen(const char* path, const char* mode) {
++    const auto wide = wide_path(path);
++    if (wide.empty()) return nullptr;
++    const std::wstring wide_mode(mode, mode + strlen(mode));
++    return _wfopen(wide.c_str(), wide_mode.c_str());
++}
++#else
++using PathStat = struct stat;
++int path_stat(const char* path, PathStat* st) { return stat(path, st); }
++FILE* path_fopen(const char* path, const char* mode) { return fopen(path, mode); }
++#endif
++} // namespace
++
++
+ bool file_or_directory_exists(const char* path) {
+     if (!path) return false;
++#ifdef _WIN32
++    const auto wide = wide_path(path);
++    return !wide.empty() && _waccess(wide.c_str(), F_OK) == 0;
++#else
+     return access(path, F_OK) == 0;
++#endif
+ }
+ 
+ bool file_exists(const char* path) {
+     if (!path) return false;
+ 
+-    struct stat st;
+-    if (stat(path, &st) == 0) {
++    PathStat st;
++    if (path_stat(path, &st) == 0) {
+         return (st.st_mode & S_IFREG) != 0;
+     }
+     return false;
+@@ -41,8 +77,8 @@ bool file_exists(const char* path) {
+ bool directory_exists(const char* path) {
+     if (!path) return false;
+     
+-    struct stat st;
+-    if (stat(path, &st) == 0) {
++    PathStat st;
++    if (path_stat(path, &st) == 0) {
+         return (st.st_mode & S_IFDIR) != 0;
+     }
+     return false;
+@@ -51,7 +87,7 @@ bool directory_exists(const char* path) {
+ bool create_file(const char* path, const char* content) {
+     if (!path) return false;
+     
+-    FILE* file = fopen(path, "wb");
++    FILE* file = path_fopen(path, "wb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to create file: " << path);
+         return false;
+@@ -76,7 +112,7 @@ bool create_file(const char* path, const char* content) {
+ bool create_file_binary(const char* path, const void* data, size_t size) {
+     if (!path) return false;
+     
+-    FILE* file = fopen(path, "wb");
++    FILE* file = path_fopen(path, "wb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to create binary file: " << path);
+         return false;
+@@ -100,7 +136,7 @@ bool create_file_binary(const char* path, const void* data, size_t size) {
+ bool append_to_file(const char* path, const char* content) {
+     if (!path || !content) return false;
+     
+-    FILE* file = fopen(path, "ab");
++    FILE* file = path_fopen(path, "ab");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to open file for appending: " << path);
+         return false;
+@@ -121,15 +157,15 @@ bool append_to_file(const char* path, const char* content) {
+ char* read_file_text(const char* path, size_t* size_out) {
+     if (!path) return nullptr;
+ 
+-    struct stat st;
+-    if (stat(path, &st) != 0) {
++    PathStat st;
++    if (path_stat(path, &st) != 0) {
+         LOG_ERROR("FS", "Failed to stat file: " << path);
+         return nullptr;
+     }
+ 
+     size_t file_size = st.st_size;
+     
+-    FILE* file = fopen(path, "rb");
++    FILE* file = path_fopen(path, "rb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to open file for reading: " << path);
+         return nullptr;
+@@ -160,7 +196,7 @@ char* read_file_text(const char* path, size_t* size_out) {
+ void* read_file_binary(const char* path, size_t* size_out) {
+     if (!path || !size_out) return nullptr;
+     
+-    FILE* file = fopen(path, "rb");
++    FILE* file = path_fopen(path, "rb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to open binary file for reading: " << path);
+         return nullptr;
+@@ -201,7 +237,8 @@ bool create_directory(const char* path) {
+     }
+     
+ #ifdef _WIN32
+-    return _mkdir(path) == 0;
++    const auto wide = wide_path(path);
++    return !wide.empty() && _wmkdir(wide.c_str()) == 0;
+ #else
+     return mkdir(path, 0755) == 0;
+ #endif
+@@ -258,8 +295,8 @@ bool create_directories(const char* path) {
+ int64_t get_file_size(const char* path) {
+     if (!path) return -1;
+     
+-    struct stat st;
+-    if (stat(path, &st) == 0) {
++    PathStat st;
++    if (path_stat(path, &st) == 0) {
+         return st.st_size;
+     }
+     return -1;
+@@ -276,14 +313,20 @@ bool is_directory(const char* path) {
+ bool delete_file(const char* path) {
+     if (!path) return false;
+     
++#ifdef _WIN32
++    const auto wide = wide_path(path);
++    return !wide.empty() && _wremove(wide.c_str()) == 0;
++#else
+     return remove(path) == 0;
++#endif
+ }
+ 
+ bool delete_directory(const char* path) {
+     if (!path) return false;
+     
+ #ifdef _WIN32
+-    return RemoveDirectoryA(path) != 0;
++    const auto wide = wide_path(path);
++    return !wide.empty() && RemoveDirectoryW(wide.c_str()) != 0;
+ #else
+     return rmdir(path) == 0;
+ #endif
+@@ -292,13 +335,13 @@ bool delete_directory(const char* path) {
+ bool copy_file(const char* src_path, const char* dest_path) {
+     if (!src_path || !dest_path) return false;
+ 
+-    FILE* src_file = fopen(src_path, "rb");
++    FILE* src_file = path_fopen(src_path, "rb");
+     if (!src_file) {
+         LOG_ERROR("FS", "Failed to open source file for copying: " << src_path);
+         return false;
+     }
+ 
+-    FILE* dest_file = fopen(dest_path, "wb");
++    FILE* dest_file = path_fopen(dest_path, "wb");
+     if (!dest_file) {
+         LOG_ERROR("FS", "Failed to open destination file for copying: " << dest_path);
+         fclose(src_file);
+@@ -335,7 +378,7 @@ bool copy_file(const char* src_path, const char* dest_path) {
+ bool move_file(const char* src_path, const char* dest_path) {
+     if (!src_path || !dest_path) return false;
+     
+-    if (rename(src_path, dest_path) == 0) {
++    if (rename_file(src_path, dest_path)) {
+         return true;
+     }
+     
+@@ -356,21 +399,39 @@ void free_file_buffer(void* buffer) {
+ bool get_current_directory(char* buffer, size_t buffer_size) {
+     if (!buffer || buffer_size == 0) return false;
+     
++#ifdef _WIN32
++    const DWORD needed = GetCurrentDirectoryW(0, nullptr);
++    if (!needed) return false;
++    std::wstring wide(needed, L'\0');
++    const DWORD length = GetCurrentDirectoryW(needed, wide.data());
++    if (!length || length >= needed) return false;
++    const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), length, nullptr, 0, nullptr, nullptr);
++    if (bytes <= 0 || static_cast<size_t>(bytes) >= buffer_size) return false;
++    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), length, buffer, bytes, nullptr, nullptr)) return false;
++    buffer[bytes] = '\0';
++    return true;
++#else
+     return getcwd(buffer, buffer_size) != nullptr;
++#endif
+ }
+ 
+ bool set_current_directory(const char* path) {
+     if (!path) return false;
+     
++#ifdef _WIN32
++    const auto wide = wide_path(path);
++    return !wide.empty() && _wchdir(wide.c_str()) == 0;
++#else
+     return chdir(path) == 0;
++#endif
+ }
+ 
+ // File metadata operations
+ uint64_t get_file_modified_time(const char* path) {
+     if (!path) return 0;
+     
+-    struct stat st;
+-    if (stat(path, &st) == 0) {
++    PathStat st;
++    if (path_stat(path, &st) == 0) {
+         return static_cast<uint64_t>(st.st_mtime);
+     }
+     return 0;
+@@ -416,7 +477,7 @@ std::string get_parent_directory(const char* path) {
+ bool write_file_chunk(const char* path, uint64_t offset, const void* data, size_t size) {
+     if (!path || !data) return false;
+     
+-    FILE* file = fopen(path, "r+b");
++    FILE* file = path_fopen(path, "r+b");
+     if (!file) {
+         // Check if file doesn't exist (vs other errors like permission denied)
+         if (!file_exists(path)) {
+@@ -429,7 +490,7 @@ bool write_file_chunk(const char* path, uint64_t offset, const void* data, size_
+                 }
+             }
+             // Create new file with read+write mode (w+b is safe here since file doesn't exist)
+-            file = fopen(path, "w+b");
++            file = path_fopen(path, "w+b");
+             if (!file) {
+                 LOG_ERROR("FS", "Failed to create file for chunk writing: " << path);
+                 return false;
+@@ -466,7 +527,7 @@ bool write_file_chunk(const char* path, uint64_t offset, const void* data, size_
+ bool read_file_chunk(const char* path, uint64_t offset, void* buffer, size_t size) {
+     if (!path || !buffer) return false;
+     
+-    FILE* file = fopen(path, "rb");
++    FILE* file = path_fopen(path, "rb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to open file for chunk reading: " << path);
+         return false;
+@@ -498,7 +559,7 @@ bool read_file_chunk(const char* path, uint64_t offset, void* buffer, size_t siz
+ bool create_file_with_size(const char* path, uint64_t size) {
+     if (!path) return false;
+     
+-    FILE* file = fopen(path, "wb");
++    FILE* file = path_fopen(path, "wb");
+     if (!file) {
+         LOG_ERROR("FS", "Failed to create file with size: " << path);
+         return false;
+@@ -533,7 +594,7 @@ static bool fs_seek64(FILE* f, uint64_t offset) {
+ bool FileStream::open_read(const char* path) {
+     close();
+     if (!path) return false;
+-    f_ = fopen(path, "rb");
++    f_ = path_fopen(path, "rb");
+     if (!f_) { LOG_ERROR("FS", "FileStream: cannot open for reading: " << path); return false; }
+     return true;
+ }
+@@ -541,11 +602,11 @@ bool FileStream::open_read(const char* path) {
+ bool FileStream::open_write(const char* path) {
+     close();
+     if (!path) return false;
+-    f_ = fopen(path, "r+b");               // keep existing content (positioned writes)
++    f_ = path_fopen(path, "r+b");               // keep existing content (positioned writes)
+     if (!f_ && !file_exists(path)) {
+         std::string parent = get_parent_directory(path);
+         if (!parent.empty() && !directory_exists(parent.c_str())) create_directories(parent.c_str());
+-        f_ = fopen(path, "w+b");           // create fresh
++        f_ = path_fopen(path, "w+b");           // create fresh
+     }
+     if (!f_) { LOG_ERROR("FS", "FileStream: cannot open for writing: " << path); return false; }
+     return true;
+@@ -571,7 +632,13 @@ void FileStream::close() {
+ bool rename_file(const char* old_path, const char* new_path) {
+     if (!old_path || !new_path) return false;
+ 
++#ifdef _WIN32
++    const auto old_wide = wide_path(old_path);
++    const auto new_wide = wide_path(new_path);
++    return !old_wide.empty() && !new_wide.empty() && _wrename(old_wide.c_str(), new_wide.c_str()) == 0;
++#else
+     return rename(old_path, new_path) == 0;
++#endif
+ }
+ 
+ // Path utilities
+@@ -632,9 +699,11 @@ bool list_directory(const char* path, std::vector<DirectoryEntry>& entries) {
+     entries.clear();
+     
+ #ifdef _WIN32
+-    WIN32_FIND_DATAA find_data;
++    WIN32_FIND_DATAW find_data;
+     std::string search_path = std::string(path) + "\\*";
+-    HANDLE find_handle = FindFirstFileA(search_path.c_str(), &find_data);
++    const auto wide_search = wide_path(search_path.c_str());
++    if (wide_search.empty()) return false;
++    HANDLE find_handle = FindFirstFileW(wide_search.c_str(), &find_data);
+     
+     if (find_handle == INVALID_HANDLE_VALUE) {
+         return false;
+@@ -642,12 +711,19 @@ bool list_directory(const char* path, std::vector<DirectoryEntry>& entries) {
+     
+     do {
+         // Skip "." and ".." entries
+-        if (strcmp(find_data.cFileName, ".") == 0 || strcmp(find_data.cFileName, "..") == 0) {
++        if (wcscmp(find_data.cFileName, L".") == 0 || wcscmp(find_data.cFileName, L"..") == 0) {
+             continue;
+         }
+         
+         DirectoryEntry entry;
+-        entry.name = find_data.cFileName;
++        const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, find_data.cFileName, -1, nullptr, 0, nullptr, nullptr);
++        if (bytes <= 0) { FindClose(find_handle); return false; }
++        entry.name.resize(static_cast<size_t>(bytes));
++        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, find_data.cFileName, -1, entry.name.data(), bytes, nullptr, nullptr)) {
++            FindClose(find_handle);
++            return false;
++        }
++        entry.name.pop_back();
+         entry.path = combine_paths(path, entry.name);
+         entry.is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+         
+@@ -667,7 +743,7 @@ bool list_directory(const char* path, std::vector<DirectoryEntry>& entries) {
+         
+         entries.push_back(entry);
+         
+-    } while (FindNextFileA(find_handle, &find_data));
++    } while (FindNextFileW(find_handle, &find_data));
+     
+     FindClose(find_handle);
+     
+@@ -688,8 +764,8 @@ bool list_directory(const char* path, std::vector<DirectoryEntry>& entries) {
+         entry.name = entry_ptr->d_name;
+         entry.path = combine_paths(path, entry.name);
+         
+-        struct stat st;
+-        if (stat(entry.path.c_str(), &st) == 0) {
++        PathStat st;
++        if (path_stat(entry.path.c_str(), &st) == 0) {
+             entry.is_directory = S_ISDIR(st.st_mode);
+             entry.size = entry.is_directory ? 0 : static_cast<uint64_t>(st.st_size);
+             entry.modified_time = static_cast<uint64_t>(st.st_mtime);
+@@ -708,4 +784,4 @@ bool list_directory(const char* path, std::vector<DirectoryEntry>& entries) {
+     return true;
+ }
+ 
+-} // namespace librats 
+\ No newline at end of file
++} // namespace librats
+diff --git a/src/librats/util/fs.h b/src/librats/util/fs.h
+index 10db6a5..0afa1f9 100644
+--- a/src/librats/util/fs.h
++++ b/src/librats/util/fs.h
+@@ -8,6 +8,9 @@
+ 
+ namespace librats {
+ 
++// Filesystem paths and returned directory names are UTF-8 on every platform.
++// Windows implementations convert to UTF-16 at the native API boundary.
++
+ // File/Directory existence check
+ RATS_API bool file_or_directory_exists(const char* path);
+ RATS_API bool directory_exists(const char* path);
+@@ -133,4 +136,4 @@ inline bool validate_path(const std::string& path, bool check_write_access = fal
+     return validate_path(path.c_str(), check_write_access); 
+ }
+ 
+-} // namespace librats 
+\ No newline at end of file
++} // namespace librats
+diff --git a/tests/test_bt_disk_io.cpp b/tests/test_bt_disk_io.cpp
+index 5802436..01238ee 100644
+--- a/tests/test_bt_disk_io.cpp
++++ b/tests/test_bt_disk_io.cpp
+@@ -9,6 +9,7 @@
+ #include <filesystem>
+ #include <fstream>
+ #include <future>
++#include <iterator>
+ #include <string>
+ 
+ using namespace librats::bittorrent;
+@@ -108,6 +109,30 @@ protected:
+ 
+ } // namespace
+ 
++TEST_F(BtDiskIo, Utf8SavePathAndTorrentNamesSurviveReopen) {
++    const std::string save_path = stdfs::path(dir_).u8string() + u8"/\u4e0b\u8f7d\U0001f4e6";
++    const std::string root = u8"\u6d4b\u8bd5";
++    const std::string name = u8"\u65e5\u672c\u8a9e.bin";
++    const Bytes data = make_data(35000);
++    const TorrentInfo info = multi_file_info(root, {{name, 35000}}, data, 16384);
++    {
++        ThreadedDiskIo disk(info, save_path, {}, {2});
++        ASSERT_NO_FATAL_FAILURE(write_all(disk, info, data));
++    }
++    const auto native = stdfs::u8path(save_path + "/" + root + "/" + name);
++    ASSERT_TRUE(stdfs::is_regular_file(native));
++    EXPECT_EQ(stdfs::file_size(native), data.size());
++    std::ifstream file(native, std::ios::binary);
++    const std::string stored((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
++    EXPECT_EQ(stored, std::string(data.begin(), data.end()));
++
++    // Reopening must find and verify the same files (the resume/recheck path).
++    ThreadedDiskIo reopened(info, save_path, {}, {2});
++    std::promise<Bitfield> checked;
++    reopened.async_check_files(Bitfield{}, nullptr, [&](Bitfield have) { checked.set_value(std::move(have)); });
++    EXPECT_EQ(checked.get_future().get().count(), info.num_pieces());
++}
++
+ TEST_F(BtDiskIo, SingleFileWriteReadHashCheck) {
+     Bytes data = make_data(32768 * 2 + 5000);  // 3 pieces (2 full + short)
+     TorrentInfo info = single_file_info("payload.bin", data, 32768);
+diff --git a/tests/test_fs.cpp b/tests/test_fs.cpp
+index ce2586a..7cb8e8e 100644
+--- a/tests/test_fs.cpp
++++ b/tests/test_fs.cpp
+@@ -38,6 +38,76 @@ protected:
+ };
+ 
+ 
++TEST_F(FSTest, Utf8PathsRoundTripThroughNativeFilesystem) {
++    const std::string dir = u8"\u4e0b\u8f7d/\u6d4b\u8bd5\U0001f4e6";
++    const std::string file = dir + u8"/\u65e5\u672c\u8a9e.bin";
++    ASSERT_TRUE(create_directories(dir.c_str()));
++    // Check with an independent Unicode-aware API: a self-consistent mojibake
++    // path must not make this test pass.
++    ASSERT_TRUE(std::filesystem::is_directory(std::filesystem::u8path(dir)));
++    ASSERT_TRUE(create_file_with_size(file.c_str(), 8));
++    ASSERT_TRUE(std::filesystem::is_regular_file(std::filesystem::u8path(file)));
++    EXPECT_TRUE(file_or_directory_exists(file));
++    EXPECT_TRUE(file_exists(file));
++    EXPECT_EQ(get_file_size(file.c_str()), 8);
++    EXPECT_GT(get_file_modified_time(file.c_str()), 0u);
++
++    const char payload[] = "payload";
++    ASSERT_TRUE(write_file_chunk(file, 1, payload, 7));
++    char readback[7]{};
++    ASSERT_TRUE(read_file_chunk(file, 1, readback, sizeof(readback)));
++    EXPECT_EQ(std::string(readback, sizeof(readback)), "payload");
++    {
++        FileStream stream;
++        ASSERT_TRUE(stream.open_write(file.c_str()));
++        ASSERT_TRUE(stream.write_at(0, "!", 1));
++    }
++    {
++        FileStream stream;
++        ASSERT_TRUE(stream.open_read(file.c_str()));
++        char data[8]{};
++        ASSERT_EQ(stream.read(data, sizeof(data)), sizeof(data));
++        EXPECT_EQ(std::string(data, sizeof(data)), "!payload");
++    }
++
++    std::vector<DirectoryEntry> entries;
++    ASSERT_TRUE(list_directory(dir.c_str(), entries));
++    ASSERT_EQ(entries.size(), 1u);
++    EXPECT_EQ(entries.front().name, u8"\u65e5\u672c\u8a9e.bin");
++    EXPECT_EQ(entries.front().size, 8u);
++    const std::string copy = dir + u8"/\u526f\u672c.bin";
++    const std::string moved = dir + u8"/\u79fb\u52a8.bin";
++    ASSERT_TRUE(copy_file(file.c_str(), copy.c_str()));
++    ASSERT_TRUE(move_file(copy.c_str(), moved.c_str()));
++    ASSERT_TRUE(delete_file(moved.c_str()));
++    ASSERT_TRUE(rename_file(file.c_str(), copy.c_str()));
++    EXPECT_EQ(read_file_text_cpp(copy), "!payload");
++    ASSERT_TRUE(delete_file(copy.c_str()));
++    ASSERT_TRUE(delete_directory(dir.c_str()));
++    EXPECT_FALSE(std::filesystem::exists(std::filesystem::u8path(dir)));
++}
++
++TEST_F(FSTest, Utf8CurrentDirectoryRoundTrip) {
++    const auto path = dir_ / std::filesystem::u8path(u8"\u4e2d\u6587\U0001f4e6");
++    ASSERT_TRUE(std::filesystem::create_directory(path));
++    ASSERT_TRUE(set_current_directory(path.u8string().c_str()));
++    char buffer[4096]{};
++    ASSERT_TRUE(get_current_directory(buffer, sizeof(buffer)));
++    EXPECT_EQ(std::filesystem::u8path(buffer), path);
++    char tiny[1]{};
++    EXPECT_FALSE(get_current_directory(tiny, sizeof(tiny)));
++}
++
++#ifdef _WIN32
++TEST_F(FSTest, InvalidUtf8PathIsRejected) {
++    const char invalid[] = "invalid_\xff.bin";
++    EXPECT_FALSE(create_file(invalid, "data"));
++    EXPECT_FALSE(create_directory(invalid));
++    EXPECT_FALSE(file_or_directory_exists(invalid));
++    EXPECT_TRUE(std::filesystem::is_empty(dir_));
++}
++#endif
++
+ TEST_F(FSTest, BasicFileOperations) {
+     const char* test_file = "test_file.txt";
+     const char* test_content = "Hello, World!\nThis is a test file.";

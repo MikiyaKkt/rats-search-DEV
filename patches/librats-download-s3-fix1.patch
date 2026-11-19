@@ -1,0 +1,139 @@
+diff --git a/src/librats/bittorrent/boundary_store.cpp b/src/librats/bittorrent/boundary_store.cpp
+index e6d9132..4117535 100644
+--- a/src/librats/bittorrent/boundary_store.cpp
++++ b/src/librats/bittorrent/boundary_store.cpp
+@@ -3,6 +3,7 @@
+ #include "librats/util/fs.h"
+ #include <filesystem>
+ #include <stdexcept>
++#include <charconv>
+ 
+ namespace librats::bittorrent {
+ BoundaryStore::BoundaryStore(const TorrentInfo& info,std::string path)
+@@ -60,17 +61,20 @@ bool BoundaryStore::save_manifest(const std::vector<int>& p,std::uint64_t revisi
+     auto target=combine_paths(root_,"manifest"),temp=target+".tmp";
+     return create_file_binary(temp.c_str(),bytes.data(),bytes.size()) && replace_file_atomic(temp.c_str(),target.c_str());
+ }
+-bool BoundaryStore::materialize(std::size_t index,std::vector<std::string>& created) {
++bool BoundaryStore::materialize(std::size_t index,std::vector<std::string>& created,const std::vector<std::pair<std::uint32_t,std::size_t>>& fragments) {
+     const auto& file=files_.file_at(index);const auto target=combine_paths(save_,file.path);
++    // Selection alone must not allocate a possibly huge, entirely missing file.
++    // Normal writes create it on demand; only existing fragments need migration.
++    if(file.size && std::none_of(fragments.begin(),fragments.end(),[index](const auto& fragment){return fragment.second==index;}))return true;
+     const bool exists=file_exists(target);
+     if(!create_directories(get_parent_directory(target).c_str())) return false;
+     if(!exists) {if(!create_file_with_size(target,file.size)) return false;created.push_back(target);}
+     if(!file.size) return true;
+-    const auto first=std::uint64_t(file.offset)/files_.piece_length(),last=std::uint64_t(file.offset+file.size-1)/files_.piece_length();
+-    for(auto p=first;p<=last;++p) {
+-        const auto part=part_path(p,index);if(!file_exists(part)) continue;
++    for(const auto& fragment:fragments) {
++        if(fragment.second!=index)continue;
++        const auto p=fragment.first;const auto part=part_path(p,index);
+         const auto s=full_slice(p,index);Bytes data(s.size);
+-        if(get_file_size(part.c_str())!=s.size) continue; // recheck will invalidate missing/truncated bytes
++        if(get_file_size(part.c_str())!=s.size) return false;
+         if(!read_file_chunk(part,0,data.data(),data.size()) || !write_file_chunk(target,s.offset,data.data(),data.size())) return false;
+     }
+     return true;
+@@ -78,19 +82,33 @@ bool BoundaryStore::materialize(std::size_t index,std::vector<std::string>& crea
+ bool BoundaryStore::apply_selection_change(const std::vector<int>& next,std::uint64_t revision) {
+     if(!error_.empty() && !load_manifest()) return false;
+     if(!FileSelection::validate(files_,next).empty()) return false;
++    std::vector<DirectoryEntry> entries;
++    if(directory_exists(root_) && !list_directory(root_.c_str(),entries))return false;
++    std::vector<std::pair<std::uint32_t,std::size_t>> fragments;
++    for(const auto& entry:entries) {
++        if(entry.is_directory)continue;
++        const auto dash=entry.name.find('-'),dot=entry.name.rfind(".part");
++        if(dash==std::string::npos || dot==std::string::npos || dot+5!=entry.name.size() || dash>=dot)continue;
++        std::uint32_t piece=0;std::size_t file=0;
++        auto a=std::from_chars(entry.name.data(),entry.name.data()+dash,piece);
++        auto b=std::from_chars(entry.name.data()+dash+1,entry.name.data()+dot,file);
++        if(a.ec!=std::errc{} || b.ec!=std::errc{} || a.ptr!=entry.name.data()+dash || b.ptr!=entry.name.data()+dot
++            || piece>=files_.num_pieces() || file>=next.size()
++            || entry.name!=std::to_string(piece)+"-"+std::to_string(file)+".part" || !full_slice(piece,file).size)continue;
++        fragments.emplace_back(piece,file);
++    }
+     std::vector<std::string> created;
+     for(std::size_t i=0;i<next.size();++i) if(next[i] && (!priorities_[i] || files_.file_at(i).size==0)) {
+-        if(!materialize(i,created)) {for(const auto& path:created) delete_file(path.c_str());return false;}
++        if(!materialize(i,created,fragments)) {for(const auto& path:created) delete_file(path.c_str());return false;}
+     }
+     if(!save_manifest(next,revision)) {for(const auto& path:created) delete_file(path.c_str());return false;}
+     priorities_=next;revision_=revision;
+     const auto wanted=FileSelection::build_piece_priorities(files_,next);
+     // Delete only engine-owned fragments whose numeric identities are known.
+     // Selected data has been materialized before the atomic manifest commit.
+-    for(std::uint32_t piece=0;piece<files_.num_pieces();++piece)
+-        for(const auto& slice:files_.map_block(piece,0,files_.piece_size(piece)))
+-            if(next[slice.file_index] || wanted[piece]==PiecePriority::DontDownload)
+-                delete_file(part_path(piece,slice.file_index).c_str());
++    for(const auto& fragment:fragments)
++        if(next[fragment.second] || wanted[fragment.first]==PiecePriority::DontDownload)
++            delete_file(part_path(fragment.first,fragment.second).c_str());
+     return true;
+ }
+ }
+diff --git a/src/librats/bittorrent/boundary_store.h b/src/librats/bittorrent/boundary_store.h
+index 04d9de8..beb360b 100644
+--- a/src/librats/bittorrent/boundary_store.h
++++ b/src/librats/bittorrent/boundary_store.h
+@@ -22,7 +22,7 @@ private:
+     std::string part_path(std::uint32_t piece,std::size_t file) const;
+     FileSlice full_slice(std::uint32_t piece,std::size_t file) const;
+     bool save_manifest(const std::vector<int>&,std::uint64_t);
+-    bool materialize(std::size_t file,std::vector<std::string>& created);
++    bool materialize(std::size_t file,std::vector<std::string>& created,const std::vector<std::pair<std::uint32_t,std::size_t>>& fragments);
+     FileStorage files_;
+     std::string save_,root_,hash_,error_;
+     std::vector<int> priorities_;
+diff --git a/src/librats/bittorrent/torrent.cpp b/src/librats/bittorrent/torrent.cpp
+index 7c0fec0..c0c4013 100644
+--- a/src/librats/bittorrent/torrent.cpp
++++ b/src/librats/bittorrent/torrent.cpp
+@@ -1108,16 +1108,26 @@ void Torrent::set_file_priorities(std::vector<int> priorities,std::uint64_t revi
+     if(!has_metadata_ || !disk_ || selection_applying_ || last_error_ || !FileSelection::validate(info_.files(),priorities).empty()) {
+         done(classify_fs_error(EINVAL,"fileSelection",save_path_));return;
+     }
+-    const bool allowed=content_allowed_;
++    const bool allowed=content_allowed_, checking=state_==State::Checking;
++    const auto previous=file_priorities_;
+     pause();selection_applying_=true;++selection_generation_;
+-    disk_->apply_file_selection(priorities,revision,[this,priorities,revision,allowed,done=std::move(done)](DiskError error) mutable {
++    disk_->apply_file_selection(priorities,revision,[this,priorities,previous,revision,allowed,checking,done=std::move(done)](DiskError error) mutable {
+         selection_applying_=false;
+         if(error) {fail_io(error);done(error);return;}
++        auto have=picker_->have_bitfield();
++        const auto wanted=FileSelection::build_piece_priorities(info_.files(),priorities);
++        // Only discarded engine-owned fragments invalidate a verified piece.
++        // Final files survive deselection; retained bytes need no disk rehash.
++        for(std::uint32_t p=0;p<have.size();++p) if(have.get(p) && wanted[p]==PiecePriority::DontDownload)
++            for(const auto& slice:info_.files().map_block(p,0,info_.piece_size(p)))
++                if(!previous[slice.file_index]) {have.reset(p);break;}
+         file_priorities_=std::move(priorities);selection_revision_=revision;
+         picker_=std::make_unique<PiecePicker>(info_.num_pieces(),info_.piece_length(),info_.total_size());
+-        apply_piece_priorities();verified_bytes_=0;verified_file_bytes_.assign(info_.num_files(),0);resume_have_={};
++        picker_->set_have_bitfield(have);apply_piece_priorities();rebuild_verified_state(have);
+         content_allowed_=allowed && FileSelection::any_selected(file_priorities_);
+-        completed_announced_=false;check_pending_=true;begin_check();
++        completed_announced_=false;
++        if(checking) {resume_have_={};check_pending_=true;begin_check();}
++        else state_=!content_allowed_?State::Waiting:full_complete()?State::Seeding:selected_complete()?State::PartialSeeding:State::Downloading;
+         done({});
+     });
+ }
+@@ -1127,7 +1137,12 @@ void Torrent::recheck(std::function<void(DiskError)> done,bool retry) {
+     }
+     if(retry) clear_error();
+     set_file_priorities(file_priorities_,selection_revision_,[this,done=std::move(done)](DiskError error) mutable {
+-        if(error) done(error);else check_operation_=std::move(done);
++        if(error) {done(error);return;}
++        check_operation_=std::move(done);
++        ++selection_generation_;
++        picker_=std::make_unique<PiecePicker>(info_.num_pieces(),info_.piece_length(),info_.total_size());
++        apply_piece_priorities();verified_bytes_=0;verified_file_bytes_.assign(info_.num_files(),0);
++        resume_have_={};check_pending_=true;begin_check();
+     });
+ }
+ } // namespace librats::bittorrent

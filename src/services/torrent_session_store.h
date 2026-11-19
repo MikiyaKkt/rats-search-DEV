@@ -8,6 +8,18 @@
 
 namespace rats::service {
 
+struct SessionDocument {
+    int schemaVersion = 2;
+    qint64 revision = 0;
+    QVector<Download> downloads;
+};
+struct SessionLoadResult {
+    enum Status { Loaded, Missing, Migrated, Invalid, IoError } status = Missing;
+    SessionDocument document;
+    QString error;
+    bool ok() const { return status == Loaded || status == Missing || status == Migrated; }
+};
+
 // Reads and writes the download session file (torrents_session.json): the set
 // of active downloads to restore on the next launch. This is pure JSON file I/O
 // — it holds no state, touches no librats and saves no resume data (the service
@@ -18,14 +30,16 @@ namespace rats::service {
 // live one. Never hand-build the file object here.
 class TorrentSessionStore {
 public:
-    // Overwrite the session file with `downloads`. Removes the file when the list
-    // is empty. Returns false only on a real write error.
+    SessionLoadResult loadDocument(const QString& filePath) const;
+    bool saveDocument(const QString& filePath, const SessionDocument&, QString* error = nullptr) const;
+    static QJsonObject migrateLegacyArray(const QJsonArray&);
+    static QString validateDocument(const QJsonObject&);
+    // Compatibility wrapper. Empty lists remain a versioned document. Writes
+    // validate first and atomically replace the file using QSaveFile.
     bool save(const QString& filePath, const QVector<Download>& downloads) const;
 
-    // Parse the session file into restore entries (empty on a missing or
-    // malformed file). Populated fields: hash, name, savePath, totalSize, paused,
-    // removeOnDone, completed, downloadedBytes, progress and the per-file
-    // selection/progress.
+    // Compatibility wrapper; logs errors. New callers should use loadDocument
+    // to distinguish a missing file from corruption or an unsupported version.
     QVector<Download> load(const QString& filePath) const;
 };
 

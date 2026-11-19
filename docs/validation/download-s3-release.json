@@ -1,0 +1,29 @@
+﻿{
+    "stage":  "S3-awaiting-human-validation",
+    "version":  "2.0.0.1516",
+    "zip":  "RatsSearch-Windows-x64-s3.zip",
+    "sha256":  "0586420ef7d0a66e4370e90fc11d17811fc577ad7fe5a7536bc456a8d5707851",
+    "ctestTargets":  26,
+    "ctestPassed":  26,
+    "ctestSeconds":  127.07,
+    "portableSmoke":  {
+                          "passed":  true,
+                          "actualZipExtracted":  true,
+                          "unicodePackagePath":  true,
+                          "asciiIsolatedDatabasePath":  true,
+                          "unicodePayloadPath":  true,
+                          "localTrackerAndSeeder":  true,
+                          "payloadBytes":  524288,
+                          "exactBytesCompared":  true,
+                          "forcedProcessRestart":  true,
+                          "policyPersistenceVerified":  true,
+                          "rememberedUserDirectoryChanged":  false
+                      },
+    "libratsCleanPatchFilesVerified":  9,
+    "benchmark":  {
+                      "baselineMedianMiBps":  5.9768397459843108,
+                      "defaultMedianMiBps":  5.7971014492753623,
+                      "advancedMedianMiBps":  5.9891446752760622,
+                      "defaultChangePercent":  -3.0072463768116031
+                  }
+}

@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include "common/download_status.h"
 #include <functional>
 
 namespace librats {
@@ -24,14 +25,25 @@ class P2PTransport;
 struct EngineFile {
     QString path;
     qint64 size = 0;
+    qint64 verifiedBytes = 0;
+    int priority=1;
 };
 
 // A thread-safe snapshot of a librats torrent's live state, translated into Qt
 // types so nothing above the engine needs to include a librats header.
 struct TorrentSnapshot {
+    qint64 wantedBytes=0,wantedVerifiedBytes=0,selectionRevision=0;
+    bool selectedComplete=false,fullTorrentComplete=false;
     bool exists = false; // librats still tracks this info-hash
     bool hasMetadata = false; // name/files/size are known
     bool isComplete = false;
+    bool paused = false;
+    bool contentAllowed = true;
+    DownloadPhase phase = DownloadPhase::Stopped;
+    DownloadError error;
+    qint64 verifiedBytes = 0;
+    qint64 queuedUploadBytes = 0; // legacy engine counter: queued, not on-wire
+    qint64 hashFailures = 0;
     QString name;
     qint64 totalSize = 0;
     qint64 downloaded = 0;
@@ -67,14 +79,34 @@ struct SeedResult {
 // service layer. Every librats type stays behind this boundary.
 class TorrentEngine {
 public:
+    enum class StartMode { Inactive, MetadataOnly, Automatic };
+    struct CreateOptions {
+        StartMode mode = StartMode::Inactive;
+        bool loadResume = false;
+        bool verifyExisting = true;
+        bool torrentFile = false;
+    };
     // Drives a progress bar while the creator hashes each piece.
     using CreationProgressCallback = std::function<void(int currentPiece, int totalPieces)>;
 
     // transport is borrowed (non-owning) and must outlive the engine.
     explicit TorrentEngine(P2PTransport* transport);
+    virtual ~TorrentEngine() = default;
+    virtual OperationResult createDownload(const QString& source, const QString& savePath, CreateOptions options);
+    virtual bool startMetadata(const QString& hash);
+    virtual bool startContent(const QString& hash);
+    virtual bool setGlobalPolicy(qint64 down, qint64 up, int peers, int taskPeers, int checking);
+    virtual bool setTaskPolicy(const QString& hash, qint64 down, qint64 up, int peers);
+    virtual bool allowContent(const QString& hash, bool allowed);
+    using FileOperationCallback=std::function<void(OperationResult)>;
+    virtual void setFilePriorities(const QString&,const QVector<int>&,qint64 expected,FileOperationCallback);
+    virtual void recheck(const QString&,bool retry,FileOperationCallback);
+    virtual bool setAdvancedPolicy(const QString&,const QString& strategy,bool automatic,int manual,int minimum,int maximum);
+    virtual void setCacheBudget(qint64 bytes);
+    virtual QJsonObject pieceMap(const QString&,int maximum=256) const;
 
     // True when the BitTorrent subsystem is up and a client is available.
-    bool isReady() const;
+    virtual bool isReady() const;
 
     // --- Adding torrents ----------------------------------------------------
     // Add a metadata-less magnet download; metadata arrives later via BEP 9.
@@ -101,13 +133,13 @@ public:
     bool fetchTorrentFile(const QString& hash, TorrentFileCallback callback, int timeoutMs = 60000);
 
     // --- Lifecycle ----------------------------------------------------------
-    void pause(const QString& hash);
-    void resume(const QString& hash);
-    void remove(const QString& hash);
-    void saveResumeData(const QString& hash);
+    virtual void pause(const QString& hash);
+    virtual void resume(const QString& hash);
+    virtual void remove(const QString& hash);
+    virtual void saveResumeData(const QString& hash);
 
     // A thread-safe snapshot of the torrent's live state (exists=false if gone).
-    TorrentSnapshot status(const QString& hash) const;
+    virtual TorrentSnapshot status(const QString& hash) const;
 
     // --- Creation / seeding -------------------------------------------------
     // Hash `path` into a new torrent and start seeding it. Optionally writes the

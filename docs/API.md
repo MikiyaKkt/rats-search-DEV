@@ -716,13 +716,13 @@ No parameters. Returns an array of active-download objects with progress info.
 #### `download.selectFiles` - Select files for download
 
 ```
-GET http://localhost:8095/api/download.selectFiles?hash=29ebe63...&files=[0,2,5]
+GET http://localhost:8095/api/download.selectFiles?hash=29ebe63...&files=[true,false,true]
 ```
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `hash` | string | yes | | Info hash |
-| `files` | array | yes | | Array of file indices to download |
+| `files` | array | yes | | Boolean array in original metadata order; exact file count required |
 
 ---
 
@@ -1043,3 +1043,134 @@ if data['success']:
 
 > The legacy Electron/Node.js version is located in the `legacy/` folder.
 > It uses a different API format (socket.io + polling queue). See the legacy README for details.
+
+## S0 download status additions
+
+The existing download commands and JSON keys remain supported. `downloaded`
+(in progress events) and `downloadedBytes` (in task objects) are cumulative received
+payload counters, including retries. They are not proof of data written or verified.
+
+Additional fields on task/progress snapshots:
+
+| Field | Meaning |
+|---|---|
+| `receivedPayloadBytes` | Explicit name for the cumulative receive counter |
+| `verifiedBytes` | Current bytes covered by successfully verified pieces; rebuilt after recheck |
+| `progressPending` | Saved progress is being displayed until local storage verification finishes; completion events remain suppressed |
+| `verifiedSpeed` | Smoothed verified-byte completion rate in B/s; zero while checking, paused or failed |
+| `phase` | `stopped`, `metadata`, `checking`, `downloading`, `seeding`, `waiting`, or `error` |
+| `enginePaused` | Actual engine pause state, separate from the legacy user pause flag |
+| `error` | `{code,message,operation,path,systemCode,retryable}`; empty code means no fatal error |
+| `hashFailures` | Piece hash mismatches; distinct from filesystem failures |
+| `queuedUploadBytes` / `uploadQueueSpeed` | Bytes/rate queued for upload, NOT actual socket transmission accounting |
+
+File objects add `verifiedBytes`; their progress reflects verified intervals.
+`progress` uses verified payload bytes / total size, rather than received bytes or
+piece count. `timeRemaining` uses remaining verified bytes and `verifiedSpeed`;
+zero retains the legacy unavailable/finished convention. S0 does not implement
+partial downloading: file selection remains local until the S2 implementation.
+
+Additional WebSocket events:
+
+| Event | Payload |
+|---|---|
+| `downloadFailed` | `{ "hash": "...", "error": { ... } }`; emitted once per changed fatal error |
+| `downloadStateChanged` | `{ "hash": "...", "state": "error" }`; emitted on phase changes |
+
+Persistent I/O errors halt content requests. Ordinary resume does not clear them.
+S0 recovery is remove-and-add after fixing the filesystem problem; structured
+retry/recheck commands are scheduled for S2. A stored completed flag is only
+historical: restored downloads verify existing content before declaring completion.
+
+## S1 bandwidth and queue controls
+
+Rates use exact nonnegative integer B/s (maximum 2^53-1). Global zero means
+unlimited; task null inherits; task zero removes its own cap but never bypasses
+the global cap. Unknown policy keys, wrong types and invalid enums are rejected.
+
+| Command | Parameters / result |
+|---|---|
+| `download.policy.get` | Current global policy including `revision` |
+| `download.policy.set` | `{expectedRevision, policy:{...}}`, partial policy update |
+| `download.taskPolicy.set` | `{hash, expectedRevision, policy:{...}}`, task policy revision |
+| `download.queue.move` | `{hash, beforeHash, expectedRevision}`, global/queue revision; omitted/empty beforeHash appends |
+| `download.operation.get` | `{operationId}`, recent terminal operation result (up to 128, memory only) |
+
+Global fields: `downloadLimitBps`, `uploadLimitBps`, `maxConnections` (1..10000),
+`taskConnections` (1..10000), `downloadSlots`, `seedSlots`, `metadataSlots`,
+`checkingSlots` (each 1..1000). Task fields: nullable `downloadLimitBps`,
+`uploadLimitBps`, `maxConnections`, and `queuePriority` = `low`/`normal`/`high`.
+Revision is server-owned and cannot appear inside an API policy update.
+
+Successful dispatch returns an operation object. Check its `outcome`, not just
+the outer API envelope: `applied`, `rejected`, or `appliedNotPersisted`. It includes
+`error`, `revision`, and `operationId`. Updates synchronously wait for engine
+confirmation; this implementation does not return an unfinished `accepted` state.
+Stale revisions reject the whole change. `appliedNotPersisted` means the live
+engine accepted the change but writing config/session failed.
+
+```json
+{"hash":"<40 hex hash>","expectedRevision":0,"policy":{"downloadLimitBps":65536,"queuePriority":"high"}}
+```
+
+Task/progress snapshots add `taskPolicy`, `effectivePolicy` (list/progress),
+`queuePosition`, `schedulePaused`, `queueReason`, `uploadedBytes` and `uploadSpeed`.
+`paused` is user intent; resuming submits that intent to the scheduler. It cannot
+bypass slots. New events are `downloadPolicyChanged` (policy object) and
+`downloadQueueChanged` (`{tasks:[...]}`).
+
+In S1, the historical `queuedUploadBytes`/`uploadQueueSpeed` keys are compatibility
+aliases of the actual PeerLink-accepted content counter/rate; use
+`uploadedBytes`/`uploadSpeed` in new clients. TCP kernel/uTP queue acceptance is
+distinct from remote ACKs and excludes protocol bytes. Protocol/metadata traffic
+uses a separate combined 64 KiB/s budget. These are BT content limits, not a
+whole-process network cap. See [validation boundaries](DOWNLOAD_S1_VALIDATION.md).
+
+S2 applies file selection to engine storage and scheduling. See the S2 contract below.
+
+## S2 selective downloads
+
+`download.files.set` accepts `hash`, an exact integer `expectedRevision`, and a complete `files` array such as `[{"index":0,"priority":0},{"index":1,"priority":2}]`. Indices are original metadata order; priorities are 0 skip, 1 normal, 2 high. Reject duplicate/missing indices, unknown files, invalid priorities and stale revisions. Metadata is required. The UI and API must explicitly confirm the initial selection before content admission.
+
+The response is an operation object. `accepted` means queued, not applied. Query `download.operation.get` with its operation ID or listen for `downloadOperationFinished`. Engine acknowledgment precedes session persistence; `appliedNotPersisted` means the live mapping changed but saving failed. One file operation per task is accepted at a time. No service mutex is held while calling the reactor. Removal terminates pending operations.
+
+`download.recheck` accepts `hash` and verifies mapped final and auxiliary data. `download.retry` explicitly clears a retryable/fixed disk fault and rechecks; ordinary resume does not clear faults. Both return operation objects.
+
+`download.selectFiles` is a compatibility skip/normal adapter. It accepts a full boolean array or an object mapping file indices to booleans; it returns acceptance only. New clients should use the versioned operation API for final results and high priorities.
+
+Snapshots expose file `priority`, `selected`, `verifiedBytes`; task `wantedBytes`, `wantedVerifiedBytes`, `selectionRevision`, `selectionConfirmed`, `selectedComplete`, `fullTorrentComplete` and `selectionApplying`. `completed` remains a compatibility alias for full-download completion. `downloadSelectedCompleted` is distinct from `downloadCompleted`; partial completion never invokes remove-on-done. Additional events: `downloadFilesChanged` and `downloadOperationFinished`. Operation IDs are process-local and bounded to the latest 128 results.
+
+Skipped portions of requested pieces are stored in `.parts/<info-hash>/`, with an atomic metadata-bound manifest. Piece hashes and HAVE refer to whole verified pieces. Tracker left remains total torrent bytes minus all verified piece bytes, including auxiliary data. Existing final files are preserved on deselection. Restart rechecks partial storage; a corrupt manifest is an error, not permission to silently reset to all files.
+
+Restored tasks retain their settings and file selection without startup prompts.
+Snapshots preserve saved progress while inactive, waiting for metadata, or checking
+storage (`progressPending: true`), then replace it with verified engine counters.
+The service checkpoints changed progress every 10 seconds and immediately on
+completion. File-selection changes retain verified pieces whose storage survives
+the change and publish progress immediately after applying the selection; only an
+explicit recheck or initial storage verification performs a full disk scan.
+## S3 advanced download policies
+
+Global policy `schemaVersion` is 2. Version 1 and older policies without a version migrate to safe defaults; unknown versions are rejected. Session documents write version 2 and read versions 1/2, preserving S2 selection confirmation and pause intent.
+
+Task policy adds `strategy` (`rarestFirst`, `sequential`, `firstLast`), `automaticWindow` (default true), `requestWindow` (manual, 1..128), `windowMin` and `windowMax` (default 2/32, ordered within 1..128). Apply through `download.taskPolicy.set` with the current task policy revision. Existing requests converge when limits shrink. Windows remain subordinate to shared in-flight byte limits, bandwidth reservations, disk backpressure and file selection. No torrent piece length, info hash or protocol block size is changed.
+
+Global `cacheBytes` is 0 by default, accepts 0..268435456, and bounds retained read payloads across all torrents of the shared engine. A separate hard 4096-entry cap bounds the index. This is not the total process memory limit: index/keys, transient read results and the existing write queue are separate. Cache is LRU, read-only, and invalidated on writes, recheck, mapping changes and engine stop. Reads already in flight cannot reinsert an invalidated generation. Conservative invalidation can discard entries for other tasks.
+
+`download.pieces.get` accepts an existing `hash` and optional exact `maxRanges` (1..2048, default 256). The response contains aggregated half-open piece-index ranges: `begin`, `end`, `verified`, `wanted`, `active`, `high`, and a shared-engine `cacheBytes` observation. Counts are pieces, not bytes. It is an on-demand reactor snapshot, not included in ordinary progress events. Limit polling to every few seconds.
+
+Global policy adds `schedule`:
+
+```json
+{"enabled":true,"timeZone":"Asia/Tokyo","rules":[{"days":31,"startMinute":1380,"endMinute":60,"downloadLimitBps":131072,"uploadLimitBps":65536,"pause":false}]}
+```
+
+`days` is a bit mask, Monday=1 through Sunday=64; 31 means weekdays. Start is 0..1439, end 0..1440, exclusive; equal endpoints are invalid. An end before start crosses midnight and belongs to the start day. At most 64 non-overlapping intervals are allowed. Local DST missing minutes do not exist; repeated minutes follow the same local rule. Rules add caps intersected with ordinary global and task caps; 0 adds no cap. `pause` stops BT content, preserving user pause intent. Control/metadata activity is separate. Resolution follows wall time on the service's approximately 1-second tick.
+
+`download.schedule.get` returns the schedule, global revision, current rule caps/pause and `nextChangeUtc` (empty if no change within the weekly horizon). `download.schedule.set` accepts a complete `schedule` and exact global `expectedRevision`; `download.policy.set` also accepts the nested object.
+
+Seeding policy is `{"ratioPermille":1500,"durationSeconds":3600,"mode":"any"}`. Ratio is 0..1000000 (1500 = 1.5); duration is 0..315360000 seconds; zero disables a condition. Mode is `any` or `all` over enabled conditions; no enabled condition never stops. Ratio uses actual cumulative uploaded payload since the last manual restart divided by selected target bytes. A zero-size target cannot satisfy a ratio condition. Time accumulates only after selected completion while admitted and unpaused. Download-phase uploads still count toward the ratio.
+
+Global `seeding` defaults to both conditions disabled; task `seeding:null` inherits. `download.seeding.set` accepts `policy` (complete object or null), exact `expectedRevision`, and optional `hash`: omitted/empty hash changes global defaults (null disables them); a task hash changes its override (null inherits), using that task's policy revision.
+
+Progress/session fields `seededMilliseconds`, `seedingUploadedBytes`, `seedingStopped` track independent persistent ledgers, so a restart/reset of the engine's transport counter does not lose prior ratio progress. Reaching a goal releases the seed slot and reports `queueReason:seedingGoal`; it neither deletes files nor sets user pause intent. `download.resume` / task Restart seeding resets the goal ledgers when a goal stopped the task. Partial seeding stays distinct from full completion.

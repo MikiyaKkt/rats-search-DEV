@@ -1,0 +1,47 @@
+{
+    "stage":  "S3-fix1-awaiting-human-validation",
+    "verifiedAtUtc":  "2026-11-19T11:50:05.6099575Z",
+    "ctest":  {
+                  "engineCases":  118,
+                  "elapsedSeconds":  127.15,
+                  "failed":  0,
+                  "passed":  27
+              },
+    "selectionTiming":  {
+                            "record":  "download-s3-fix1-selection.txt",
+                            "changes":  10,
+                            "usesTrustedResumeFixture":  true,
+                            "logicalBytes":  137438953472,
+                            "allocatesPayload":  false,
+                            "worstMs":  8,
+                            "assertedBoundMs":  500,
+                            "files":  2,
+                            "pieces":  32768
+                        },
+    "languages":  [
+                      "zh",
+                      "ja",
+                      "de",
+                      "fr",
+                      "es",
+                      "ru",
+                      "ko"
+                  ],
+    "package":  {
+                    "smokePassed":  true,
+                    "exactPayloadComparison":  true,
+                    "unicodeExeAndDownloadPaths":  true,
+                    "immediateProgressAfterRestart":  true,
+                    "path":  "dist/RatsSearch-Windows-x64-s3-fix1.zip",
+                    "bytes":  64059810,
+                    "rememberedSelectionAfterRestart":  true,
+                    "sha256":  "c817402d96d0a176a8a9c9a608a56cd4c828315d8fb96832f15dc3bbe395f7bd"
+                },
+    "patch":  {
+                  "patchedSourceEqualityPassed":  true,
+                  "path":  "patches/librats-download-s3-fix1.patch",
+                  "reverseCheckPassed":  true,
+                  "cleanS3ApplicationPassed":  true
+              },
+    "preservedS3Sha256":  "0586420ef7d0a66e4370e90fc11d17811fc577ad7fe5a7536bc456a8d5707851"
+}

@@ -1,4 +1,8 @@
+#include <algorithm>
+#include <limits>
 #include "downloadswidget.h"
+#include "taskdownloaddialog.h"
+#include <QMessageBox>
 #include "app/application.h"
 #include "app/favorites_store.h"
 #include "domain/torrent.h"
@@ -82,6 +86,12 @@ void DownloadItemWidget::setupUi(const QString& name, qint64 size)
     pauseButton_->setObjectName("secondaryButton");
     connect(pauseButton_, &QPushButton::clicked, this, [this]() { emit pauseToggled(hash_); });
     bottomRow->addWidget(pauseButton_);
+    auto* properties=new QPushButton(tr("Settings"),this);
+    connect(properties,&QPushButton::clicked,this,[this]{emit policyRequested(hash_);});
+    bottomRow->addWidget(properties);
+    auto* first=new QPushButton(tr("Queue first"),this);
+    connect(first,&QPushButton::clicked,this,[this]{emit queueFirstRequested(hash_);});
+    bottomRow->addWidget(first);
 
     cancelButton_ = new QPushButton(tr("Cancel"), this);
     cancelButton_->setObjectName("dangerButton");
@@ -147,6 +157,50 @@ void DownloadItemWidget::setCompleted()
     // removed from the list (and stops seeding); relabel rather than hide so the
     // action stays reachable.
     cancelButton_->setText(tr("Remove"));
+}
+
+void DownloadItemWidget::applyProgress(const QJsonObject& snapshot)
+{
+    const bool complete = snapshot["completed"].toBool();
+    if (!complete && completed_) {
+        completed_ = false;
+        disconnect(pauseButton_, &QPushButton::clicked, nullptr, nullptr);
+        connect(pauseButton_, &QPushButton::clicked, this, [this] { emit pauseToggled(hash_); });
+        pauseButton_->setObjectName("secondaryButton");
+        pauseButton_->style()->unpolish(pauseButton_);
+        pauseButton_->style()->polish(pauseButton_);
+        cancelButton_->setText(tr("Cancel"));
+    }
+    const auto error = snapshot["error"].toObject();
+    pauseButton_->setEnabled(error["code"].toString().isEmpty());
+    if (complete) setCompleted();
+    const qint64 verified = snapshot.contains("wantedVerifiedBytes") ? snapshot["wantedVerifiedBytes"].toVariant().toLongLong()
+        : snapshot["downloaded"].toVariant().toLongLong();
+    const qint64 total = snapshot.contains("wantedBytes") ? snapshot["wantedBytes"].toVariant().toLongLong()
+        : snapshot["totalSize"].toVariant().toLongLong();
+    const double rate = snapshot.contains("verifiedSpeed") ? snapshot["verifiedSpeed"].toDouble() : snapshot["downloadSpeed"].toDouble();
+    updateProgress(verified, total, static_cast<int>(std::clamp(rate, 0.0, double(std::numeric_limits<int>::max()))), snapshot["progress"].toDouble());
+    setPaused(snapshot["paused"].toBool());
+    const auto phase = snapshot["phase"].toString();
+    if (!error["code"].toString().isEmpty())
+        statusLabel_->setText(tr("Disk error: %1 (%2)").arg(error["message"].toString(), error["code"].toString()));
+    else if (phase == "checking") statusLabel_->setText(tr("Checking files"));
+    else if (phase == "waiting" && !snapshot["paused"].toBool() && !snapshot["enginePaused"].toBool()) statusLabel_->setText(tr("Waiting to start"));
+    else if (phase == "metadata") statusLabel_->setText(tr("Fetching metadata"));
+    if(snapshot["schedulePaused"].toBool() && !snapshot["paused"].toBool() && error["code"].toString().isEmpty())
+        statusLabel_->setText(tr("Queued: %1").arg(snapshot["queueReason"].toString()));
+    if(snapshot["selectedComplete"].toBool() && !complete)statusLabel_->setText(tr("Selected files complete (partial seeding)"));
+    if(!snapshot["selectionConfirmed"].toBool() && phase!="metadata")statusLabel_->setText(tr("Confirm files in task settings"));
+    if(snapshot["seedingStopped"].toBool())statusLabel_->setText(tr("Seeding goal reached"));
+    else if(snapshot["queueReason"].toString()=="timeSchedule")statusLabel_->setText(tr("Paused by bandwidth schedule"));
+    const auto effective=snapshot["effectivePolicy"].toObject();
+    auto limit=[](QJsonValue value){ return value.toInteger()==0?QString("∞"):rats::ui::formatSize(value.toInteger())+"/s"; };
+    speedLabel_->setText(tr("↓ %1/s  ↑ %2/s").arg(rats::ui::formatSize(qint64(rate)),
+        rats::ui::formatSize(snapshot["uploadSpeed"].toInteger())));
+    speedLabel_->setToolTip(tr("Effective limits: ↓ %1  ↑ %2").arg(limit(effective["downloadLimitBps"]),limit(effective["uploadLimitBps"])));
+    statusLabel_->setToolTip(tr("Received: %1\nVerified: %2\nError path: %3")
+        .arg(rats::ui::formatSize(snapshot["receivedPayloadBytes"].toVariant().toLongLong()),
+             rats::ui::formatSize(verified), error["path"].toString()));
 }
 
 void DownloadItemWidget::setPaused(bool paused)
@@ -266,6 +320,9 @@ void DownloadsWidget::setApplication(rats::app::Application* app)
             downloads, &rats::service::DownloadService::downloadCompleted, this, &DownloadsWidget::onDownloadCompleted);
         connect(
             downloads, &rats::service::DownloadService::torrentRemoved, this, &DownloadsWidget::onDownloadCancelled);
+        connect(downloads,&rats::service::DownloadService::selectionRequired,this,[this](const QString& hash){
+            auto* dialog=new TaskDownloadDialog(app_->downloads(),hash,this);dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->open();
+        });
         loadDownloads();
     }
 
@@ -291,11 +348,7 @@ void DownloadsWidget::loadDownloads()
     for (const rats::service::Download& dl : downloads) {
         addDownloadItem(dl.hash, dl.name, dl.totalSize);
 
-        // Update progress if available
-        if (dl.progress > 0) {
-            downloadItems_[dl.hash]->updateProgress(
-                dl.downloadedBytes, dl.totalSize, static_cast<int>(dl.downloadSpeed), dl.progress);
-        }
+        downloadItems_[dl.hash]->applyProgress(dl.toJson());
 
         if (dl.completed) {
             downloadItems_[dl.hash]->setCompleted();
@@ -326,6 +379,16 @@ void DownloadsWidget::addDownloadItem(const QString& hash, const QString& name, 
     connect(item, &DownloadItemWidget::cancelRequested, this, &DownloadsWidget::onCancelRequested);
     connect(item, &DownloadItemWidget::openRequested, this, &DownloadsWidget::onOpenRequested);
     connect(item, &DownloadItemWidget::favoriteRequested, this, &DownloadsWidget::onFavoriteRequested);
+    connect(item,&DownloadItemWidget::policyRequested,this,[this](const QString& hash){
+        TaskDownloadDialog dialog(app_->downloads(),hash,this); dialog.exec();
+    });
+    connect(item,&DownloadItemWidget::queueFirstRequested,this,[this](const QString& hash){
+        auto tasks=app_->downloads()->allDownloads();
+        std::sort(tasks.begin(),tasks.end(),[](const auto& a,const auto& b){return a.queuePosition<b.queuePosition;});
+        if(tasks.isEmpty() || tasks.front().hash==hash) return;
+        const auto r=app_->downloads()->moveQueueItem(hash,tasks.front().hash,app_->downloads()->globalPolicy().revision);
+        if(r.outcome!=rats::OperationResult::Outcome::Applied) QMessageBox::warning(this,tr("Queue"),r.error.message);
+    });
 
     if (app_ && app_->favorites())
         item->setFavorite(app_->favorites()->isFavorite(hash));
@@ -381,27 +444,7 @@ void DownloadsWidget::onProgressUpdated(const QString& hash, const QJsonObject& 
     if (!downloadItems_.contains(hash)) {
         return;
     }
-    DownloadItemWidget* item = downloadItems_[hash];
-
-    // Completion is carried in every progress payload, so surface it here too —
-    // not only via downloadCompleted. That edge-triggered signal can fire before
-    // this widget is connected (e.g. a finished torrent restored at startup), so
-    // relying on it alone would leave the item looking like an active download.
-    if (progress["completed"].toBool()) {
-        item->setCompleted();
-        return;
-    }
-
-    qint64 downloaded = progress["downloaded"].toVariant().toLongLong();
-    qint64 total = progress["total"].toVariant().toLongLong();
-    int speed = progress["downloadSpeed"].toInt();
-    double progressPercent = progress["progress"].toDouble();
-    item->updateProgress(downloaded, total, speed, progressPercent);
-
-    // Reflect paused state carried in the progress payload.
-    if (progress.contains("paused")) {
-        item->setPaused(progress["paused"].toBool());
-    }
+    downloadItems_[hash]->applyProgress(progress);
 }
 
 void DownloadsWidget::onDownloadCompleted(const QString& hash)

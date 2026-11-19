@@ -1,0 +1,75 @@
+{
+    "schemaVersion":  1,
+    "date":  "2026-11-16",
+    "platform":  "Windows x64",
+    "compiler":  "MinGW 13.1 Release",
+    "qt":  "6.10.1",
+    "protocol":  "localhost TCP, no MSE/uTP/DHT",
+    "pieceBytes":  262144,
+    "baselineRevision":  "364169f06d9ed38abdf95c6b000855849302eb78",
+    "baselinePatch":  "librats-windows-utf8.patch",
+    "currentPatch":  "librats-download-s0.patch",
+    "baseline":  {
+                     "payloadBytes":  33554432,
+                     "runs":  [
+                                  {
+                                      "MiBps":  6.098723079855155,
+                                      "cpuSeconds":  1.609375,
+                                      "elapsedMs":  5247,
+                                      "logicalWrittenBytes":  33554433,
+                                      "peakWorkingSetMiB":  109.9765625,
+                                      "writeAmplification":  1.0000000298023224
+                                  },
+                                  {
+                                      "MiBps":  6.163328197226503,
+                                      "cpuSeconds":  1.171875,
+                                      "elapsedMs":  5192,
+                                      "logicalWrittenBytes":  33554433,
+                                      "peakWorkingSetMiB":  110.1171875,
+                                      "writeAmplification":  1.0000000298023224
+                                  },
+                                  {
+                                      "MiBps":  6.554690700532569,
+                                      "cpuSeconds":  1.296875,
+                                      "elapsedMs":  4882,
+                                      "logicalWrittenBytes":  33554433,
+                                      "peakWorkingSetMiB":  110.9296875,
+                                      "writeAmplification":  1.0000000298023224
+                                  }
+                              ]
+                 },
+    "current":  {
+                    "payloadBytes":  33554432,
+                    "runs":  [
+                                 {
+                                     "MiBps":  6.312882225290984,
+                                     "cpuSeconds":  1.34375,
+                                     "elapsedMs":  5069,
+                                     "logicalWrittenBytes":  33554433,
+                                     "peakWorkingSetMiB":  106.57421875,
+                                     "writeAmplification":  1.0000000298023224
+                                 },
+                                 {
+                                     "MiBps":  6.60338423442014,
+                                     "cpuSeconds":  1.4375,
+                                     "elapsedMs":  4846,
+                                     "logicalWrittenBytes":  33554433,
+                                     "peakWorkingSetMiB":  109.6171875,
+                                     "writeAmplification":  1.0000000298023224
+                                 },
+                                 {
+                                     "MiBps":  6.246340035135662,
+                                     "cpuSeconds":  1.1875,
+                                     "elapsedMs":  5123,
+                                     "logicalWrittenBytes":  33554433,
+                                     "peakWorkingSetMiB":  109.6171875,
+                                     "writeAmplification":  1.0000000298023224
+                                 }
+                             ]
+                },
+    "notes":  [
+                  "CPU and working set include local seed and download in one process",
+                  "Logical successful write-call bytes, not physical SSD amplification",
+                  "Three samples are a local regression check, not a general performance claim"
+              ]
+}

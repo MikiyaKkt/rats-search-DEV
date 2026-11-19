@@ -98,3 +98,12 @@ After server start, `rats.json` will be created in the root folder:
 |--------|-------------|
 | `httpPort` | Port which HTTP server listens on |
 | `dbPath` | Path to database folder with torrent collection |
+
+## S2 headless download confirmation
+
+Headless clients must fetch task metadata and submit a complete `download.files.set` selection with the current `selectionRevision` as `expectedRevision`. Content remains waiting until confirmed. Poll `download.operation.get` until the operation is terminal; do not treat accepted as committed. See [API](API.md#s2-selective-downloads). Preserve the `.parts` directory together with payload and resume/session data when moving or backing up partial downloads. Sessions without selection confirmation require manual confirmation.
+## S3 scheduling and seeding
+
+See [advanced API contracts](API.md#s3-advanced-download-policies) for version-2 policy/session migration, weekly schedules, bounded request windows, cache budgets, piece aggregation and seeding goal ledgers. Use expected revisions when updating schedules or seeding conditions; accepted file operations remain asynchronous. Schedule pause preserves manual pause intent and does not imply a process-wide network blackout. Seeding goals never remove content. Keep a backup of configuration, sessions, resume and `.parts` together.
+
+For isolated verification, `--no-remember-data-dir` prevents an explicit `--data-dir` from replacing the user's remembered location. Use an ASCII database data path with the bundled Windows Manticore; downloaded content can use Unicode paths.

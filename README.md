@@ -83,6 +83,10 @@ Rats Search is built on **[librats](https://github.com/DEgITx/librats)** — a h
 
 ## Building from Source
 
+For a one-click Windows x64 portable ZIP build, run `build-windows.cmd`.
+See [Windows build instructions](docs/BUILD_WINDOWS.md) for toolchain downloads,
+offline rebuilds, tests, and package output.
+
 ### Requirements
 
 * **CMake** 3.16+
@@ -276,3 +280,7 @@ Subscribe to autor (GitHub donations): https://github.com/sponsors/DEgITx
 ## License
 
 [MIT License](https://github.com/DEgITx/rats-search/blob/master/LICENSE) © 2026
+
+## Download settings validation build
+
+The S3 build adds download strategies, bounded request windows, a shared read cache, weekly bandwidth schedules, seeding conditions and a piece map alongside the S1/S2 controls. See the [implementation report](docs/DOWNLOAD_S3_REPORT.md), [manual checklist](docs/DOWNLOAD_S3_VALIDATION.md), and [Windows build instructions](docs/BUILD_WINDOWS.md). The default build script produces an independent s3-fix1 ZIP for human validation. See the [fix1 report](docs/DOWNLOAD_S3_FIX1_REPORT.md) for remembered settings, startup progress, selection latency and localization fixes.

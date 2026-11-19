@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="de_DE">
 <context>
@@ -2490,5 +2490,89 @@ Möchten Sie das Update jetzt installieren?</translation>
         <source>Updates not supported on this platform</source>
         <translation>Updates werden auf dieser Plattform nicht unterstützt</translation>
     </message>
+</context>
+<context><name>DownloadScheduleWidget</name>
+<message><source>Add interval</source><translation>Zeitraum hinzufügen</translation></message>
+<message><source>Days</source><translation>Wochentage</translation></message>
+<message><source>Download KiB/s</source><translation>Download KiB/s</translation></message>
+<message><source>Enable weekly bandwidth schedule</source><translation>Wöchentlichen Bandbreitenplan aktivieren</translation></message>
+<message><source>Fri</source><translation>Fr</translation></message>
+<message><source>From</source><translation>Von</translation></message>
+<message><source>IANA time zone, e.g. Asia/Tokyo</source><translation>IANA-Zeitzone, z. B. Asia/Tokyo</translation></message>
+<message><source>Intervals use local wall time and may cross midnight. End 00:00 means midnight. Overlaps are rejected. Zero adds no rate cap; global and task caps still apply. DST repeated minutes use the same rule.</source><translation>Zeiträume verwenden Ortszeit und dürfen Mitternacht überschreiten. Ende 00:00 bedeutet Mitternacht. Überschneidungen sind unzulässig. Null setzt kein Zusatzlimit; globale und Aufgabenlimits gelten weiter. Wiederholte Minuten bei Zeitumstellung folgen derselben Regel.</translation></message>
+<message><source>Mon</source><translation>Mo</translation></message>
+<message><source>Pause content</source><translation>Inhaltsübertragung pausieren</translation></message>
+<message><source>Remove interval</source><translation>Zeitraum entfernen</translation></message>
+<message><source>Sat</source><translation>Sa</translation></message>
+<message><source>Sun</source><translation>So</translation></message>
+<message><source>Thu</source><translation>Do</translation></message>
+<message><source>Time zone</source><translation>Zeitzone</translation></message>
+<message><source>Tue</source><translation>Di</translation></message>
+<message><source>Until</source><translation>Bis</translation></message>
+<message><source>Upload KiB/s</source><translation>Upload KiB/s</translation></message>
+<message><source>Wed</source><translation>Mi</translation></message>
+</context>
+<context><name>PieceMapWidget</name>
+<message><source>Green: verified; blue: active; gray: wanted; dark: skipped. Each cell may aggregate multiple pieces.</source><translation>Grün: verifiziert; blau: aktiv; grau: gewünscht; dunkel: übersprungen. Eine Zelle kann mehrere Stücke zusammenfassen.</translation></message>
+<message><source>Piece map</source><translation>Stückübersicht</translation></message>
+<message><source>Piece map is available after metadata and storage startup</source><translation>Stückübersicht nach Metadaten- und Speicherstart verfügbar</translation></message>
+</context>
+<context><name>SeedingPolicyWidget</name>
+<message><source> s</source><translation> s</translation></message>
+<message><source>Active seeding time</source><translation>Aktive Seeding-Zeit</translation></message>
+<message><source>Inherit global seeding conditions</source><translation>Globale Seeding-Bedingungen übernehmen</translation></message>
+<message><source>Share ratio</source><translation>Freigabeverhältnis</translation></message>
+<message><source>Stop when all enabled conditions are reached</source><translation>Bei allen erfüllten aktiven Bedingungen stoppen</translation></message>
+<message><source>Stop when any condition is reached</source><translation>Bei einer erfüllten Bedingung stoppen</translation></message>
+<message><source>Unlimited</source><translation>Unbegrenzt</translation></message>
+</context>
+<context><name>SettingsDialog</name>
+<message><source>Active downloads</source><translation>Aktive Downloads</translation></message>
+<message><source>Active seeds</source><translation>Aktive Seeds</translation></message>
+<message><source>BT connections per task</source><translation>BT-Verbindungen pro Aufgabe</translation></message>
+<message><source>BT connections total</source><translation>BT-Verbindungen gesamt</translation></message>
+<message><source>Default seeding conditions</source><translation>Standard-Seeding-Bedingungen</translation></message>
+<message><source>Disabled</source><translation>Deaktiviert</translation></message>
+<message><source>Download settings</source><translation>Download-Einstellungen</translation></message>
+<message><source>File checks</source><translation>Gleichzeitige Dateiprüfungen</translation></message>
+<message><source>Global download limit</source><translation>Globales Download-Limit</translation></message>
+<message><source>Global upload limit</source><translation>Globales Upload-Limit</translation></message>
+<message><source>Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files.</source><translation>Limits gelten für BitTorrent-Inhalte über TCP und uTP. Protokoll und Metadaten nutzen ein separates Budget von 64 KiB/s. Cache ist optional; Seeding-Bedingungen löschen keine Dateien.</translation></message>
+<message><source>Metadata tasks</source><translation>Metadaten-Aufgaben</translation></message>
+<message><source>Shared read cache</source><translation>Gemeinsamer Lesecache</translation></message>
+<message><source>Unlimited</source><translation>Unbegrenzt</translation></message>
+</context>
+<context><name>TaskDownloadDialog</name>
+<message><source>-1 inherits; 0 removes the task cap. Global caps always apply. Confirm files before downloading content. Skipped boundary data is kept in .parts for piece verification.</source><translation>-1 übernimmt globale Werte; 0 hebt das Aufgabenlimit auf. Globale Limits gelten immer. Dateien vor dem Download bestätigen. Grenzdaten übersprungener Dateien bleiben zur Prüfung in .parts.</translation></message>
+<message><source>Automatic maximum</source><translation>Automatisches Maximum</translation></message>
+<message><source>Automatic minimum</source><translation>Automatisches Minimum</translation></message>
+<message><source>Automatically adapt request window</source><translation>Anfragefenster automatisch anpassen</translation></message>
+<message><source>BT connections</source><translation>BT-Verbindungen</translation></message>
+<message><source>Confirm file selection</source><translation>Dateiauswahl bestätigen</translation></message>
+<message><source>Download limit</source><translation>Download-Limit</translation></message>
+<message><source>Download strategy</source><translation>Download-Strategie</translation></message>
+<message><source>File</source><translation>Datei</translation></message>
+<message><source>File selection</source><translation>Dateiauswahl</translation></message>
+<message><source>Filter files by name or extension</source><translation>Nach Name oder Endung filtern</translation></message>
+<message><source>High</source><translation>Hoch</translation></message>
+<message><source>Inherit</source><translation>Globale Einstellung übernehmen</translation></message>
+<message><source>Low</source><translation>Niedrig</translation></message>
+<message><source>Manual requests per peer</source><translation>Manuelle Anfragen pro Peer</translation></message>
+<message><source>Normal</source><translation>Normal</translation></message>
+<message><source>Priority</source><translation>Priorität</translation></message>
+<message><source>Queue priority</source><translation>Warteschlangenpriorität</translation></message>
+<message><source>Rarest first</source><translation>Seltenste Stücke zuerst</translation></message>
+<message><source>Recheck</source><translation>Erneut prüfen</translation></message>
+<message><source>Recheck / retry files</source><translation>Dateien erneut prüfen / wiederholen</translation></message>
+<message><source>Restart seeding after goal</source><translation>Seeding nach Zielerreichung neu starten</translation></message>
+<message><source>Seeding conditions</source><translation>Seeding-Bedingungen</translation></message>
+<message><source>Select matching files</source><translation>Passende Dateien auswählen</translation></message>
+<message><source>Selected file first/last pieces</source><translation>Anfang und Ende gewählter Dateien zuerst</translation></message>
+<message><source>Sequential</source><translation>Sequenziell</translation></message>
+<message><source>Skip matching files</source><translation>Passende Dateien überspringen</translation></message>
+<message><source>Task download settings</source><translation>Download-Einstellungen der Aufgabe</translation></message>
+<message><source>Task settings</source><translation>Aufgabeneinstellungen</translation></message>
+<message><source>Upload limit</source><translation>Upload-Limit</translation></message>
+<message><source>Verified</source><translation>Verifiziert</translation></message>
 </context>
 </TS>

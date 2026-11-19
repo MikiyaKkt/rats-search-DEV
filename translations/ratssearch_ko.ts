@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="ko_KR">
 <context>
@@ -2489,5 +2489,89 @@ Do you want to install the update now?</source>
         <source>Updates not supported on this platform</source>
         <translation>이 플랫폼에서는 업데이트가 지원되지 않습니다</translation>
     </message>
+</context>
+<context><name>DownloadScheduleWidget</name>
+<message><source>Add interval</source><translation>시간 구간 추가</translation></message>
+<message><source>Days</source><translation>요일</translation></message>
+<message><source>Download KiB/s</source><translation>다운로드 KiB/s</translation></message>
+<message><source>Enable weekly bandwidth schedule</source><translation>주간 대역폭 일정 사용</translation></message>
+<message><source>Fri</source><translation>금</translation></message>
+<message><source>From</source><translation>시작</translation></message>
+<message><source>IANA time zone, e.g. Asia/Tokyo</source><translation>IANA 시간대, 예: Asia/Tokyo</translation></message>
+<message><source>Intervals use local wall time and may cross midnight. End 00:00 means midnight. Overlaps are rejected. Zero adds no rate cap; global and task caps still apply. DST repeated minutes use the same rule.</source><translation>구간은 지정 시간대의 현지 시각을 사용하며 자정을 넘을 수 있습니다. 종료 00:00은 자정입니다. 구간 중복은 허용되지 않습니다. 0은 추가 제한 없음이며 전역 및 작업 제한은 유지됩니다. 서머타임으로 반복되는 시각에도 같은 규칙이 적용됩니다.</translation></message>
+<message><source>Mon</source><translation>월</translation></message>
+<message><source>Pause content</source><translation>콘텐츠 전송 일시 중지</translation></message>
+<message><source>Remove interval</source><translation>시간 구간 제거</translation></message>
+<message><source>Sat</source><translation>토</translation></message>
+<message><source>Sun</source><translation>일</translation></message>
+<message><source>Thu</source><translation>목</translation></message>
+<message><source>Time zone</source><translation>시간대</translation></message>
+<message><source>Tue</source><translation>화</translation></message>
+<message><source>Until</source><translation>종료</translation></message>
+<message><source>Upload KiB/s</source><translation>업로드 KiB/s</translation></message>
+<message><source>Wed</source><translation>수</translation></message>
+</context>
+<context><name>PieceMapWidget</name>
+<message><source>Green: verified; blue: active; gray: wanted; dark: skipped. Each cell may aggregate multiple pieces.</source><translation>녹색: 검증됨, 파란색: 활성, 회색: 다운로드 대상, 어두운색: 건너뜀. 한 칸에 여러 조각이 표시될 수 있습니다.</translation></message>
+<message><source>Piece map</source><translation>조각 지도</translation></message>
+<message><source>Piece map is available after metadata and storage startup</source><translation>메타데이터와 저장소가 준비되면 조각 지도가 표시됩니다</translation></message>
+</context>
+<context><name>SeedingPolicyWidget</name>
+<message><source> s</source><translation> 초</translation></message>
+<message><source>Active seeding time</source><translation>활성 시딩 시간</translation></message>
+<message><source>Inherit global seeding conditions</source><translation>전역 시딩 조건 상속</translation></message>
+<message><source>Share ratio</source><translation>공유 비율</translation></message>
+<message><source>Stop when all enabled conditions are reached</source><translation>활성화된 모든 조건을 충족하면 중지</translation></message>
+<message><source>Stop when any condition is reached</source><translation>조건 중 하나를 충족하면 중지</translation></message>
+<message><source>Unlimited</source><translation>무제한</translation></message>
+</context>
+<context><name>SettingsDialog</name>
+<message><source>Active downloads</source><translation>동시 다운로드 수</translation></message>
+<message><source>Active seeds</source><translation>동시 시딩 수</translation></message>
+<message><source>BT connections per task</source><translation>작업당 BT 연결 수</translation></message>
+<message><source>BT connections total</source><translation>전체 BT 연결 수</translation></message>
+<message><source>Default seeding conditions</source><translation>기본 시딩 조건</translation></message>
+<message><source>Disabled</source><translation>사용 안 함</translation></message>
+<message><source>Download settings</source><translation>다운로드 설정</translation></message>
+<message><source>File checks</source><translation>동시 파일 검사 수</translation></message>
+<message><source>Global download limit</source><translation>전역 다운로드 속도 제한</translation></message>
+<message><source>Global upload limit</source><translation>전역 업로드 속도 제한</translation></message>
+<message><source>Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files.</source><translation>제한은 TCP 및 uTP의 BitTorrent 콘텐츠에 적용됩니다. 프로토콜과 메타데이터에는 별도 64 KiB/s 한도를 사용합니다. 캐시는 선택 사항이며 시딩 조건은 파일을 삭제하지 않습니다.</translation></message>
+<message><source>Metadata tasks</source><translation>메타데이터 작업 수</translation></message>
+<message><source>Shared read cache</source><translation>공유 읽기 캐시</translation></message>
+<message><source>Unlimited</source><translation>무제한</translation></message>
+</context>
+<context><name>TaskDownloadDialog</name>
+<message><source>-1 inherits; 0 removes the task cap. Global caps always apply. Confirm files before downloading content. Skipped boundary data is kept in .parts for piece verification.</source><translation>-1은 전역 설정 상속, 0은 작업 제한 없음입니다. 전역 제한은 항상 적용됩니다. 다운로드 전에 파일 선택을 확인하세요. 검증에 필요한 경계 데이터는 .parts에 보관됩니다.</translation></message>
+<message><source>Automatic maximum</source><translation>자동 최댓값</translation></message>
+<message><source>Automatic minimum</source><translation>자동 최솟값</translation></message>
+<message><source>Automatically adapt request window</source><translation>요청 창 자동 조정</translation></message>
+<message><source>BT connections</source><translation>BT 연결 수</translation></message>
+<message><source>Confirm file selection</source><translation>파일 선택 확인</translation></message>
+<message><source>Download limit</source><translation>다운로드 속도 제한</translation></message>
+<message><source>Download strategy</source><translation>다운로드 방식</translation></message>
+<message><source>File</source><translation>파일</translation></message>
+<message><source>File selection</source><translation>파일 선택</translation></message>
+<message><source>Filter files by name or extension</source><translation>이름 또는 확장자로 파일 필터링</translation></message>
+<message><source>High</source><translation>높음</translation></message>
+<message><source>Inherit</source><translation>전역 설정 상속</translation></message>
+<message><source>Low</source><translation>낮음</translation></message>
+<message><source>Manual requests per peer</source><translation>피어당 수동 요청 수</translation></message>
+<message><source>Normal</source><translation>보통</translation></message>
+<message><source>Priority</source><translation>우선순위</translation></message>
+<message><source>Queue priority</source><translation>대기열 우선순위</translation></message>
+<message><source>Rarest first</source><translation>희귀 조각 우선</translation></message>
+<message><source>Recheck</source><translation>재검사</translation></message>
+<message><source>Recheck / retry files</source><translation>파일 재검사 / 재시도</translation></message>
+<message><source>Restart seeding after goal</source><translation>목표 달성 후 시딩 다시 시작</translation></message>
+<message><source>Seeding conditions</source><translation>시딩 중지 조건</translation></message>
+<message><source>Select matching files</source><translation>일치하는 파일 선택</translation></message>
+<message><source>Selected file first/last pieces</source><translation>선택한 파일의 처음과 끝 조각 우선</translation></message>
+<message><source>Sequential</source><translation>순차 다운로드</translation></message>
+<message><source>Skip matching files</source><translation>일치하는 파일 건너뛰기</translation></message>
+<message><source>Task download settings</source><translation>작업 다운로드 설정</translation></message>
+<message><source>Task settings</source><translation>작업 설정</translation></message>
+<message><source>Upload limit</source><translation>업로드 속도 제한</translation></message>
+<message><source>Verified</source><translation>검증됨</translation></message>
 </context>
 </TS>

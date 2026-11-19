@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN">
 <context>
@@ -2489,5 +2489,40 @@ Do you want to install the update now?</source>
         <source>Updates not supported on this platform</source>
         <translation>此平台不支持更新</translation>
     </message>
+</context>
+
+<context><name>TaskDownloadDialog</name><message><source>High</source><translation>高</translation></message><message><source>Normal</source><translation>普通</translation></message><message><source>Priority</source><translation>优先级</translation></message><message><source>File selection</source><translation>文件选择</translation></message><message><source>Skip matching files</source><translation>跳过匹配文件</translation></message><message><source>Confirm file selection</source><translation>确认文件选择</translation></message><message><source>Select matching files</source><translation>选择匹配文件</translation></message><message><source>Filter files by name or extension</source><translation>按名称或扩展名筛选文件</translation></message><message><source>Verified</source><translation>已校验</translation></message><message><source>Recheck / retry files</source><translation>重新校验 / 重试文件</translation></message><message><source>File</source><translation>文件</translation></message></context>
+<context><name>DownloadItemWidget</name><message><source>Selected files complete (partial seeding)</source><translation>所选文件已完成（部分做种）</translation></message><message><source>Confirm files in task settings</source><translation>请在任务设置中确认文件选择</translation></message></context>
+<context><name>TorrentFilesWidget</name><message><source>Choose download files</source><translation>选择下载文件</translation></message><message><source>Preview</source><translation>预览</translation></message></context>
+
+<context><name>DownloadScheduleWidget</name><message><source>Sat</source><translation>周六</translation></message><message><source>Add interval</source><translation>添加时段</translation></message><message><source>Sun</source><translation>周日</translation></message><message><source>Tue</source><translation>周二</translation></message><message><source>Thu</source><translation>周四</translation></message><message><source>Time zone</source><translation>时区</translation></message><message><source>Mon</source><translation>周一</translation></message><message><source>Upload KiB/s</source><translation>上传 KiB/s</translation></message><message><source>Days</source><translation>星期</translation></message><message><source>Wed</source><translation>周三</translation></message><message><source>Download KiB/s</source><translation>下载 KiB/s</translation></message><message><source>Enable weekly bandwidth schedule</source><translation>启用每周带宽计划</translation></message><message><source>Intervals use local wall time and may cross midnight. End 00:00 means midnight. Overlaps are rejected. Zero adds no rate cap; global and task caps still apply. DST repeated minutes use the same rule.</source><translation>时段使用指定时区的本地时间，可跨午夜；结束 00:00 表示午夜。不允许重叠。速率 0 不增加限制，全局及任务上限仍然有效。夏令时重复分钟使用相同规则。</translation></message><message><source>IANA time zone, e.g. Asia/Tokyo</source><translation>IANA 时区，例如 Asia/Tokyo</translation></message><message><source>Fri</source><translation>周五</translation></message><message><source>Remove interval</source><translation>移除时段</translation></message><message><source>From</source><translation>开始</translation></message><message><source>Until</source><translation>结束</translation></message><message><source>Pause content</source><translation>暂停内容传输</translation></message></context>
+<context><name>TaskDownloadDialog</name><message><source>Rarest first</source><translation>稀有分片优先</translation></message><message><source>Automatically adapt request window</source><translation>自动调整请求窗口</translation></message><message><source>Selected file first/last pieces</source><translation>所选文件首尾分片优先</translation></message><message><source>Restart seeding after goal</source><translation>达到目标后重新做种</translation></message><message><source>Automatic minimum</source><translation>自动窗口下限</translation></message><message><source>Automatic maximum</source><translation>自动窗口上限</translation></message><message><source>Download strategy</source><translation>下载策略</translation></message><message><source>Manual requests per peer</source><translation>每个节点的手动请求数</translation></message><message><source>Seeding conditions</source><translation>做种停止条件</translation></message><message><source>Sequential</source><translation>顺序下载</translation></message></context>
+<context><name>PieceMapWidget</name><message><source>Piece map is available after metadata and storage startup</source><translation>元数据及存储就绪后显示分片图</translation></message><message><source>Piece map</source><translation>分片图</translation></message><message><source>Green: verified; blue: active; gray: wanted; dark: skipped. Each cell may aggregate multiple pieces.</source><translation>绿色：已校验；蓝色：活动中；灰色：待下载；深色：跳过。每格可汇总多个分片。</translation></message></context>
+<context><name>DownloadItemWidget</name><message><source>Paused by bandwidth schedule</source><translation>调速计划暂停中</translation></message><message><source>Seeding goal reached</source><translation>已达到做种目标</translation></message></context>
+<context><name>SettingsDialog</name><message><source>Default seeding conditions</source><translation>默认做种条件</translation></message><message><source>Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files.</source><translation>限制适用于 TCP/uTP 的 BT 内容。协议与元数据使用独立的 64 KiB/s 预算。读缓存默认关闭，做种停止条件不会删除文件。</translation></message><message><source>Shared read cache</source><translation>共享读缓存</translation></message><message><source>Disabled</source><translation>关闭</translation></message></context>
+<context><name>SeedingPolicyWidget</name><message><source>Unlimited</source><translation>不限</translation></message><message><source>Stop when all enabled conditions are reached</source><translation>达到全部启用条件时停止</translation></message><message><source>Inherit global seeding conditions</source><translation>继承全局做种条件</translation></message><message><source>Share ratio</source><translation>分享率</translation></message><message><source>Stop when any condition is reached</source><translation>达到任一条件时停止</translation></message><message><source>Active seeding time</source><translation>活动做种时长</translation></message><message><source> s</source><translation> 秒</translation></message></context>
+<context><name>SettingsDialog</name>
+<message><source>Active downloads</source><translation>同时下载任务数</translation></message>
+<message><source>Active seeds</source><translation>同时做种任务数</translation></message>
+<message><source>BT connections per task</source><translation>每任务 BT 连接数</translation></message>
+<message><source>BT connections total</source><translation>BT 总连接数</translation></message>
+<message><source>Download settings</source><translation>下载设置</translation></message>
+<message><source>File checks</source><translation>同时校验任务数</translation></message>
+<message><source>Global download limit</source><translation>全局下载限速</translation></message>
+<message><source>Global upload limit</source><translation>全局上传限速</translation></message>
+<message><source>Metadata tasks</source><translation>元数据任务数</translation></message>
+<message><source>Unlimited</source><translation>不限</translation></message>
+</context>
+<context><name>TaskDownloadDialog</name>
+<message><source>-1 inherits; 0 removes the task cap. Global caps always apply. Confirm files before downloading content. Skipped boundary data is kept in .parts for piece verification.</source><translation>-1 表示继承全局设置；0 表示不限制此任务。全局上限始终有效。下载前请确认文件选择。跳过文件的边界数据保存在 .parts 中，用于分片校验。</translation></message>
+<message><source>BT connections</source><translation>BT 连接数</translation></message>
+<message><source>Download limit</source><translation>下载限速</translation></message>
+<message><source>Inherit</source><translation>继承全局设置</translation></message>
+<message><source>Low</source><translation>低</translation></message>
+<message><source>Queue priority</source><translation>队列优先级</translation></message>
+<message><source>Recheck</source><translation>重新校验</translation></message>
+<message><source>Task download settings</source><translation>任务下载设置</translation></message>
+<message><source>Task settings</source><translation>任务设置</translation></message>
+<message><source>Upload limit</source><translation>上传限速</translation></message>
 </context>
 </TS>

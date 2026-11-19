@@ -1,0 +1,18 @@
+[
+    {
+        "averageBps":  32493.30866789994,
+        "bytes":  1949696,
+        "direction":  "download",
+        "limitBps":  32768,
+        "seconds":  60.003,
+        "transport":  "tcp"
+    },
+    {
+        "averageBps":  32767.453875768737,
+        "bytes":  1966080,
+        "direction":  "upload",
+        "limitBps":  32768,
+        "seconds":  60.001,
+        "transport":  "utp-mse"
+    }
+]

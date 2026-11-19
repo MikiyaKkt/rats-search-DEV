@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QStandardPaths>
@@ -53,6 +54,21 @@ ConfigStore::~ConfigStore()
     }
 }
 
+service::GlobalDownloadPolicy ConfigStore::downloadPolicy() const
+{
+    service::GlobalDownloadPolicy policy;
+    QString error;
+    service::GlobalDownloadPolicy::fromJson(config_["downloadPolicy"].toObject(), policy, error);
+    return policy;
+}
+
+bool ConfigStore::setDownloadPolicy(const service::GlobalDownloadPolicy& policy)
+{
+    if (!policy.validate().isEmpty()) return false;
+    setValue("downloadPolicy", policy.toJson().toVariantMap());
+    return save();
+}
+
 void ConfigStore::setDefaults()
 {
     config_ = QJsonObject { // Network
@@ -74,8 +90,9 @@ void ConfigStore::setDefaults()
             QJsonObject { { "maxFiles", 0 }, { "namingRegExp", "" }, { "namingRegExpNegative", false },
                 { "adultFilter", false }, { "sizeMin", 0 }, { "sizeMax", 0 }, { "contentType", "" } } },
 
-        // Downloads
+          // Downloads
         { "downloadPath", QStandardPaths::writableLocation(QStandardPaths::DownloadLocation) },
+          { "downloadPolicy", service::GlobalDownloadPolicy{}.toJson() },
 
         // UI
         { "language", "en" }, { "darkMode", false }, { "uiFontFamily", "" }, { "uiFontScale", kDefaultUiFontScale },
@@ -92,9 +109,11 @@ void ConfigStore::setDefaults()
 
 bool ConfigStore::load()
 {
+    writable_=false;
     QFile file(configPath_);
     if (!file.exists()) {
         qInfo() << "Config file not found, using defaults:" << configPath_;
+        writable_=true;
         return true;
     }
 
@@ -108,13 +127,22 @@ bool ConfigStore::load()
 
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(data, &error);
-    if (error.error != QJsonParseError::NoError) {
+    if (error.error != QJsonParseError::NoError || !doc.isObject()) {
         qWarning() << "Failed to parse config:" << error.errorString();
         return false;
     }
 
     // Merge loaded config with defaults
     QJsonObject loaded = doc.object();
+    if (loaded.contains("downloadPolicy")) {
+        service::GlobalDownloadPolicy policy;
+        QString policyError;
+        if (!loaded["downloadPolicy"].isObject()
+            || !service::GlobalDownloadPolicy::fromJson(loaded["downloadPolicy"].toObject(), policy, policyError)) {
+            qWarning() << "Invalid downloadPolicy:" << policyError;
+            return false;
+        }
+    }
     for (auto it = loaded.begin(); it != loaded.end(); ++it) {
         if (it.value().isObject() && config_.value(it.key()).isObject()) {
             // Merge nested objects
@@ -131,20 +159,22 @@ bool ConfigStore::load()
 
     validateAndClamp();
     qInfo() << "Config loaded from" << configPath_;
+    writable_=true;
     return true;
 }
 
 bool ConfigStore::save()
 {
-    QFile file(configPath_);
+    if(!writable_){qWarning()<<"Config requires recovery; original file preserved";return false;}
+    QSaveFile file(configPath_);
     if (!file.open(QIODevice::WriteOnly)) {
         qWarning() << "Failed to save config to" << configPath_;
         return false;
     }
 
     QJsonDocument doc(config_);
-    file.write(doc.toJson(QJsonDocument::Indented));
-    file.close();
+    const auto bytes = doc.toJson(QJsonDocument::Indented);
+    if (file.write(bytes) != bytes.size() || !file.commit()) return false;
 
     dirty_ = false;
     qInfo() << "Config saved to" << configPath_;
@@ -590,6 +620,27 @@ QStringList ConfigStore::fromJson(const QJsonObject& options)
 {
     QStringList changed;
 
+    // Validate the complete policy update before writing any part of a bulk
+    // request. The generic API must not partially accept an invalid policy.
+    auto proposedPolicy = config_["downloadPolicy"].toObject();
+    bool policyTouched = false;
+    if (options.contains("downloadPolicy")) {
+        if (!options["downloadPolicy"].isObject()) return {};
+        proposedPolicy = options["downloadPolicy"].toObject();
+        policyTouched = true;
+    }
+    for (auto it = options.begin(); it != options.end(); ++it) {
+        if (it.key().startsWith("downloadPolicy.")) {
+            proposedPolicy[it.key().mid(15)] = it.value();
+            policyTouched = true;
+        }
+    }
+    if (policyTouched) {
+        service::GlobalDownloadPolicy policy;
+        QString error;
+        if (!service::GlobalDownloadPolicy::fromJson(proposedPolicy, policy, error)) return {};
+    }
+
     for (auto it = options.begin(); it != options.end(); ++it) {
         if (writeValue(it.key(), it.value().toVariant())) {
             changed.append(it.key());
@@ -606,6 +657,17 @@ QStringList ConfigStore::fromJson(const QJsonObject& options)
 
 bool ConfigStore::writeValue(const QString& key, const QVariant& value)
 {
+    if (key == "downloadPolicy" || key.startsWith("downloadPolicy.")) {
+        auto object = config_["downloadPolicy"].toObject();
+        const auto json = QJsonValue::fromVariant(value);
+        if (key == "downloadPolicy") {
+            if (!json.isObject()) return false;
+            object = json.toObject();
+        } else object[key.mid(15)] = json;
+        service::GlobalDownloadPolicy policy;
+        QString error;
+        if (!service::GlobalDownloadPolicy::fromJson(object, policy, error)) return false;
+    }
     // Clamp before comparing, so an out-of-range write dedupes against the
     // already-clamped stored value on every path (typed setter, fromJson).
     const QVariant effective = clampToRange(key, value);

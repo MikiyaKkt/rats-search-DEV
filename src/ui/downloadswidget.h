@@ -31,6 +31,7 @@ public:
     // item is first created with the info-hash as a placeholder name and size 0).
     void updateInfo(const QString& name, qint64 size);
     void setCompleted();
+    void applyProgress(const QJsonObject& snapshot);
     void setPaused(bool paused);
     // Reflect whether this torrent is currently favourited on the star button.
     void setFavorite(bool favorite);
@@ -40,6 +41,8 @@ signals:
     void cancelRequested(const QString& hash);
     void openRequested(const QString& hash);
     void favoriteRequested(const QString& hash);
+    void policyRequested(const QString& hash);
+    void queueFirstRequested(const QString& hash);
 
 private:
     void setupUi(const QString& name, qint64 size);

@@ -1,0 +1,864 @@
+diff --git a/b/src/librats/bittorrent/bandwidth_controller.h b/src/librats/bittorrent/bandwidth_controller.h
+new file mode 100644
+index 0000000..0d237b5
+--- /dev/null
++++ b/src/librats/bittorrent/bandwidth_controller.h
+@@ -0,0 +1,95 @@
++#pragma once
++#include "librats/bittorrent/rate_limiter.h"
++#include "librats/bittorrent/types.h"
++#include <chrono>
++#include <map>
++
++namespace librats::bittorrent {
++class BandwidthController {
++public:
++    struct Policy { std::uint64_t down = 0, up = 0; };
++    static std::int64_t now() {
++        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
++    }
++    void set_global_policy(Policy p) { global_ = p; down_.configure(p.down, now()); request_.configure(p.down,now()); up_.configure(p.up, now()); refresh_shares(); }
++    void set_task_policy(const InfoHash& h, Policy p) {
++        auto& t = tasks_[h]; t.policy = p;
++        t.down.configure(p.down, now()); t.up.configure(p.up, now());
++        t.request.configure(p.down,now());
++    }
++    void set_active(const InfoHash& h, bool active, bool downloading=true) {
++        auto& t = tasks_[h];
++        if (t.active == active && t.downloading==downloading) return;
++        t.active = active; t.downloading=downloading; refresh_shares();
++    }
++    void remove_task(const InfoHash& h) { auto t=tasks_.find(h); if(t!=tasks_.end()) inflight_-=t->second.inflight; tasks_.erase(h); refresh_shares(); }
++    std::size_t available(const InfoHash& h, bool upload, bool content, std::size_t wanted) {
++        auto n = now();
++        if (!content) {
++            control_.configure(65536, n);
++            return (std::min<std::uint64_t>)(wanted, control_.available(n));
++        }
++        auto& t = tasks_[h];
++        auto& own = upload ? t.up : t.down;
++        auto& share = upload ? t.shareUp : t.shareDown;
++        auto& all = upload ? up_ : down_;
++        return (std::min<std::uint64_t>)(wanted,
++            (std::min)(all.available(n), (std::min)(own.available(n), share.available(n))));
++    }
++    void commit(const InfoHash& h, bool upload, bool content, std::size_t bytes) {
++        const auto n = now();
++        if (!content) { control_.consume(bytes, n); return; }
++        auto& t = tasks_[h];
++        (upload ? up_ : down_).consume(bytes, n);
++        (upload ? t.up : t.down).consume(bytes, n);
++        (upload ? t.shareUp : t.shareDown).consume(bytes, n);
++        if (upload) t.sent += bytes; else t.received += bytes;
++    }
++    std::uint64_t sent(const InfoHash& h) const { auto i = tasks_.find(h); return i == tasks_.end() ? 0 : i->second.sent; }
++    std::uint64_t received(const InfoHash& h) const { auto i = tasks_.find(h); return i == tasks_.end() ? 0 : i->second.received; }
++    std::chrono::milliseconds delay(const InfoHash& h, bool upload, bool content) {
++        auto n = now(); auto ready = n;
++        if (!content) ready = control_.nextReadyAt(1, n);
++        else {
++            auto& t = tasks_[h];
++            ready = (std::max)({(upload ? up_ : down_).nextReadyAt(1,n),
++                (upload ? t.up : t.down).nextReadyAt(1,n), (upload ? t.shareUp : t.shareDown).nextReadyAt(1,n)});
++        }
++        return std::chrono::milliseconds((std::max<std::int64_t>)(1, ready-n));
++    }
++    // In-flight reservations bound content request memory independently from
++    // ingress tokens. No token refund on CANCEL: late responses remain charged.
++    bool reserve_download(const InfoHash& h, std::size_t bytes) {
++        auto& t = tasks_[h];
++        if (inflight_ + bytes > 32*1024*1024 || t.inflight + bytes > 512*1024) return false;
++        const auto n=now();
++        if((std::min)({request_.available(n),t.request.available(n),t.requestShare.available(n)})<bytes) return false;
++        request_.consume(bytes,n);t.request.consume(bytes,n);t.requestShare.consume(bytes,n);
++        inflight_ += bytes; t.inflight += bytes; return true;
++    }
++    std::chrono::milliseconds request_delay(const InfoHash& h,std::size_t bytes) {
++        auto& t=tasks_[h]; const auto n=now();
++        if(inflight_+bytes>32*1024*1024 || t.inflight+bytes>512*1024) return std::chrono::milliseconds(1000);
++        const auto ready=(std::max)({request_.nextReadyAt(bytes,n),t.request.nextReadyAt(bytes,n),t.requestShare.nextReadyAt(bytes,n)});
++        return std::chrono::milliseconds((std::max<std::int64_t>)(1,ready-n));
++    }
++    void release_reservation(const InfoHash& h, std::size_t bytes) {
++        auto& t = tasks_[h]; auto n = (std::min)(bytes,t.inflight); t.inflight -= n; inflight_ -= n;
++    }
++private:
++    struct Task { Policy policy; TokenBucket down,up,shareDown,shareUp,request,requestShare; bool active=false,downloading=false; std::uint64_t sent=0,received=0; std::size_t inflight=0; };
++    void refresh_shares() {
++        std::size_t count=0, downloadCount=0; for (const auto& [h,t] : tasks_) if(t.active) { ++count; if(t.downloading) ++downloadCount; }
++        count = (std::max<std::size_t>)(count,1);
++        downloadCount=(std::max<std::size_t>)(downloadCount,1);
++        for (auto& [h,t] : tasks_) {
++            t.shareDown.configure(global_.down ? (long double)global_.down/downloadCount : 0,now());
++            t.requestShare.configure(global_.down ? (long double)global_.down/downloadCount : 0,now());
++            t.shareUp.configure(global_.up ? (long double)global_.up/count : 0,now());
++        }
++    }
++    Policy global_; TokenBucket down_,up_,control_,request_;
++    std::map<InfoHash,Task> tasks_;
++    std::size_t inflight_=0;
++};
++}
+diff --git a/src/librats/bittorrent/client.cpp b/src/librats/bittorrent/client.cpp
+index c906c28..7dde7fd 100644
+--- a/src/librats/bittorrent/client.cpp
++++ b/src/librats/bittorrent/client.cpp
+@@ -59,6 +59,8 @@ void Client::stop() {
+         close_socket(s);
+     }
+     pending_connects_.clear();
++    pending_hashes_.clear();
++    pending_endpoints_.clear();
+     if (is_valid_socket(listener_)) { reactor_.remove(listener_); close_socket(listener_); listener_ = RATS_INVALID_SOCKET; }
+     // After connections_, so every UtpPeerLink has already handed its stream back.
+     utp_.close();
+@@ -191,7 +193,15 @@ void Client::on_accept() {
+ }
+ 
+ void Client::adopt_inbound(std::unique_ptr<PeerLink> link, std::string ip, std::uint16_t port) {
++    if (!can_connect()) { link->close(); return; }
+     auto resolver = [this](const InfoHash& ih, PeerConnection::Binding& out) -> bool {
++        // The inbound socket already occupies its global slot; only bind its
++        // task budget here. Pending and handshaking outgoing peers count too.
++        std::size_t count=0;
++        for(const auto& pc:connections_) if(!pc->closed() && pc->info_hash()==ih) ++count;
++        for(const auto& [s,h]:pending_hashes_) if(h==ih) ++count;
++        const auto limit=task_limits_.count(ih)?task_limits_.at(ih):task_connections_;
++        if(count>=limit) return false;
+         auto it = torrents_.find(ih);
+         if (it == torrents_.end() || !it->second) return false;
+         out.observer   = it->second.get();
+@@ -210,6 +220,7 @@ void Client::adopt_inbound(std::unique_ptr<PeerLink> link, std::string ip, std::
+                                                std::move(resolver), std::move(ip), port,
+                                                config_.in_enc_policy, std::move(skey));
+     PeerConnection* raw = pc.get();
++    raw->set_content_budget(&bandwidth_);
+     connections_.push_back(std::move(pc));
+     raw->start();
+ }
+@@ -248,7 +259,8 @@ bool Client::resolve_mse_skey(const std::uint8_t* obfuscated, const std::uint8_t
+ }
+ 
+ void Client::connect_peer(Torrent& torrent, const PeerList::Endpoint& peer) {
+-    if (connections_.size() >= kMaxConnections) {
++    const auto hash = torrent.info_hash();
++    if (!can_connect(&hash)) {
+         torrent.on_connect_failed(peer.ip, peer.port);
+         return;
+     }
+@@ -294,6 +306,7 @@ bool Client::connect_peer_utp(Torrent& torrent, const PeerList::Endpoint& peer,
+                                                peer.ip, peer.port, opts);
+     LOG_DEBUG("bt.client", "dialing " << peer.ip << ':' << peer.port << " over uTP");
+     PeerConnection* raw = pc.get();
++    raw->set_content_budget(&bandwidth_);
+     connections_.push_back(std::move(pc));
+     raw->start();
+     return true;
+@@ -316,6 +329,8 @@ void Client::connect_peer_tcp(Torrent& torrent, const PeerList::Endpoint& endpoi
+     // fd is closed exactly once and the peer is reported to the torrent once.
+     const TimerId deadline = reactor_.schedule(config_.connect_timeout, [this, s, ih, ip, port] {
+         if (pending_connects_.erase(s) == 0) return;  // the connect already completed
++        pending_hashes_.erase(s);
++        pending_endpoints_.erase(s);
+         reactor_.remove(s);
+         close_socket(s);
+         LOG_DEBUG("bt.client", "connect to " << ip << ':' << port << " timed out after "
+@@ -324,12 +339,16 @@ void Client::connect_peer_tcp(Torrent& torrent, const PeerList::Endpoint& endpoi
+         if (it != torrents_.end()) it->second->on_connect_failed(ip, port);
+     });
+     pending_connects_.emplace(s, deadline);
++    pending_hashes_[s] = ih;
++    pending_endpoints_[s] = {ip,port};
+ 
+     reactor_.add(s, PollOut, [this, ih, s, ip, port, enc](std::uint32_t) {
+         auto pending = pending_connects_.find(s);
+         if (pending == pending_connects_.end()) return;  // the deadline already reclaimed it
+         reactor_.cancel(pending->second);
+         pending_connects_.erase(pending);
++        pending_hashes_.erase(s);
++        pending_endpoints_.erase(s);
+         reactor_.remove(s);  // done watching for connect completion
+         auto it = torrents_.find(ih);
+         Torrent* t = (it != torrents_.end()) ? it->second.get() : nullptr;
+@@ -343,6 +362,7 @@ void Client::connect_peer_tcp(Torrent& torrent, const PeerList::Endpoint& endpoi
+                                                    /*outgoing=*/true, t->info_hash(), peer_id_,
+                                                    t->num_pieces(), t, ip, port, enc);
+         PeerConnection* raw = pc.get();
++        raw->set_content_budget(&bandwidth_);
+         connections_.push_back(std::move(pc));
+         raw->start();
+     });
+@@ -535,6 +555,12 @@ void Client::remove_torrent_impl(const InfoHash& info_hash) {
+     if (it == torrents_.end()) return;
+     LOG_INFO("bt.client", "removed torrent " << short_hash(info_hash));
+     it->second->stop();  // closes the peers the torrent has registered in its peer list
++    std::vector<socket_t> pendingToRemove;
++    for(const auto& [socket,hash]:pending_hashes_) if(hash==info_hash) pendingToRemove.push_back(socket);
++    for(auto socket:pendingToRemove) {
++        reactor_.cancel(pending_connects_.at(socket)); reactor_.remove(socket); close_socket(socket);
++        pending_connects_.erase(socket); pending_hashes_.erase(socket); pending_endpoints_.erase(socket);
++    }
+     // stop() only closes connections the torrent knows about (its peers_ list). An
+     // *outgoing* connection that has completed connect() but not yet the wire
+     // handshake holds obs_ = this torrent, yet is not in peers_ until on_handshake —
+@@ -546,6 +572,8 @@ void Client::remove_torrent_impl(const InfoHash& info_hash) {
+     for (auto& pc : connections_)
+         if (!pc->closed() && pc->info_hash() == info_hash) pc->close("torrent removed");
+     torrents_.erase(it);
++    bandwidth_.remove_task(info_hash);
++    task_limits_.erase(info_hash);
+     // Stop the DHT traversal started for this torrent: its result has no consumer
+     // left, and letting it run keeps a lookup alive for a hash we no longer hold.
+     if (dht_) dht_->cancel_search(info_hash);
+@@ -565,13 +593,13 @@ TorrentStatus Client::torrent_status(const InfoHash& info_hash) {
+         s.is_complete  = t->is_complete() && !t->last_error() && t->state() != Torrent::State::Checking;
+         s.paused       = t->is_paused();
+         s.progress     = t->progress();
+-        s.downloaded   = t->bytes_downloaded();
++        s.downloaded   = bandwidth_.received(info_hash);
+         s.verified = t->verified_bytes();
+         s.hash_failures = t->hash_failures();
+-        s.state = t->state();
++        s.state = t->check_pending() ? Torrent::State::Checking : t->state();
+         s.error = t->last_error();
+         s.content_allowed = t->content_allowed();
+-        s.uploaded     = t->bytes_uploaded();
++        s.uploaded     = bandwidth_.sent(info_hash);
+         s.num_peers    = t->num_peers();
+         if (info.has_metadata()) {
+             s.total_size = std::uint64_t(info.total_size());
+@@ -647,6 +675,8 @@ void Client::schedule_reap() {
+ }
+ 
+ void Client::reap_closed() {
++    for(const auto& [hash,t]:torrents_) bandwidth_.set_active(hash,t->content_allowed() && !t->is_paused() &&
++        (t->state()==Torrent::State::Downloading || t->state()==Torrent::State::Seeding),t->state()==Torrent::State::Downloading);
+     connections_.erase(
+         std::remove_if(connections_.begin(), connections_.end(),
+                        [](const std::unique_ptr<PeerConnection>& pc) { return pc->closed(); }),
+@@ -657,7 +687,7 @@ void Client::sample_rates() {
+     std::uint64_t down = 0, up = 0;
+     for (auto& [hash, t] : torrents_) {
+         down += t->bytes_downloaded();
+-        up   += t->bytes_uploaded();
++        up   += bandwidth_.sent(hash);
+     }
+     const auto now = std::chrono::steady_clock::now();
+     if (last_sample_.time_since_epoch().count() != 0) {
+@@ -676,4 +706,71 @@ void Client::sample_rates() {
+     last_sample_     = now;
+ }
+ 
++bool Client::can_connect(const InfoHash* hash) const {
++    std::size_t total=pending_connects_.size(), task=0;
++    for(const auto& pc:connections_) if(!pc->closed()) { ++total; if(hash && pc->info_hash()==*hash) ++task; }
++    if(total>=max_connections_) return false;
++    if(!hash) return true;
++    for(const auto& [s,h]:pending_hashes_) if(h==*hash) ++task;
++    const auto i=task_limits_.find(*hash);
++    return task < (i==task_limits_.end()?task_connections_:i->second);
++}
++
++void Client::enforce_connections() {
++    std::map<InfoHash,std::size_t> counts;
++    std::size_t total=0;
++    for(auto& pc:connections_) if(!pc->closed()) {
++        const auto h=pc->info_hash();
++        auto limit=task_limits_.count(h)?task_limits_.at(h):task_connections_;
++        if(total>=max_connections_ || counts[h]>=limit) pc->close("connection policy reduced");
++        else { ++total; ++counts[h]; }
++    }
++    std::vector<socket_t> rejected;
++    for(const auto& [s,h]:pending_hashes_) {
++        const auto limit=task_limits_.count(h)?task_limits_.at(h):task_connections_;
++        if(total>=max_connections_ || counts[h]>=limit) rejected.push_back(s);
++        else { ++total; ++counts[h]; }
++    }
++    for(auto s:rejected) {
++        const auto h=pending_hashes_.at(s);
++        const auto endpoint=pending_endpoints_.at(s);
++        reactor_.cancel(pending_connects_.at(s)); reactor_.remove(s); close_socket(s);
++        pending_connects_.erase(s); pending_hashes_.erase(s);
++        pending_endpoints_.erase(s);
++        auto t=torrents_.find(h);
++        if(t!=torrents_.end()) t->second->on_connect_failed(endpoint.first,endpoint.second);
++    }
++}
++
++void Client::set_global_policy(BandwidthController::Policy p, std::size_t peers, std::size_t taskPeers, std::size_t checking) {
++    run_on_reactor([&] {
++        bandwidth_.set_global_policy(p);
++        max_connections_=(std::max<std::size_t>)(1,peers); task_connections_=(std::max<std::size_t>)(1,taskPeers);
++        checking_limit_=(std::max<std::size_t>)(1,checking);
++        enforce_connections();
++        wake_bandwidth_waiters();
++    });
++}
++bool Client::set_task_policy(const InfoHash& hash, BandwidthController::Policy p, std::size_t peers) {
++    return run_on_reactor([&] {
++        if(!torrents_.count(hash)) return false;
++        bandwidth_.set_task_policy(hash,p); task_limits_[hash]=(std::max<std::size_t>)(1,peers);
++        enforce_connections(); wake_bandwidth_waiters(); return true;
++    });
++}
++bool Client::allow_content(const InfoHash& hash, bool allowed) {
++    return run_on_reactor([&] { auto t=torrents_.find(hash); if(t==torrents_.end()) return false;
++        t->second->set_content_allowed(allowed); return true; });
++}
++std::shared_ptr<void> Client::acquire_check_slot() {
++    if(*active_checks_>=checking_limit_) return {};
++    ++*active_checks_;
++    return std::shared_ptr<void>(new int(0),[count=active_checks_](void* p){ delete static_cast<int*>(p); --*count; });
++}
++void Client::wake_bandwidth_waiters() {
++    std::vector<PeerConnection*> peers;
++    for(const auto& pc:connections_) if(!pc->closed()) peers.push_back(pc.get());
++    for(auto* peer:peers) peer->on_budget_ready();
++    for(auto& [h,t]:torrents_) t->wake_bandwidth();
++}
+ } // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/client.h b/src/librats/bittorrent/client.h
+index 63563db..c9ac076 100644
+--- a/src/librats/bittorrent/client.h
++++ b/src/librats/bittorrent/client.h
+@@ -128,6 +128,11 @@ public:
+     CreateResult create_magnet(const std::string& uri, const std::string& save_path, CreateOptions options = {});
+     bool start_metadata(const InfoHash& hash);
+     bool start_content(const InfoHash& hash);
++    void set_global_policy(BandwidthController::Policy policy, std::size_t connections, std::size_t taskConnections, std::size_t checking);
++    bool set_task_policy(const InfoHash& hash, BandwidthController::Policy policy, std::size_t connections);
++    bool allow_content(const InfoHash& hash, bool allowed);
++    BandwidthController* bandwidth_controller() override { return &bandwidth_; }
++    std::shared_ptr<void> acquire_check_slot() override;
+     Client& operator=(const Client&) = delete;
+ 
+     /// Wire up the listener + housekeeping timers. Must run on the reactor thread
+@@ -305,6 +310,15 @@ private:
+     /// rather than holding a raw Torrent* that may have been removed, and so the
+     /// deadline and the completion can each tell whether the other got there first.
+     std::unordered_map<socket_t, TimerId>             pending_connects_;
++    std::unordered_map<socket_t, InfoHash> pending_hashes_;
++    std::unordered_map<socket_t,std::pair<std::string,std::uint16_t>> pending_endpoints_;
++    BandwidthController bandwidth_;
++    std::size_t max_connections_ = 200, task_connections_ = 50, checking_limit_ = 1;
++    std::map<InfoHash,std::size_t> task_limits_;
++    std::shared_ptr<std::atomic<std::size_t>> active_checks_ = std::make_shared<std::atomic<std::size_t>>(0);
++    bool can_connect(const InfoHash* hash = nullptr) const;
++    void enforce_connections();
++    void wake_bandwidth_waiters();
+ 
+     // Rate sampling (updated on the reactor thread once per second).
+     std::atomic<std::uint64_t>            down_rate_{0};
+diff --git a/src/librats/bittorrent/peer_connection.cpp b/src/librats/bittorrent/peer_connection.cpp
+index 141a0ba..fde1946 100644
+--- a/src/librats/bittorrent/peer_connection.cpp
++++ b/src/librats/bittorrent/peer_connection.cpp
+@@ -95,6 +95,8 @@ PeerConnection::~PeerConnection() {
+     // Cancel the tick before we die so its captured `this` can never fire on freed
+     // memory. Same reactor thread owns both the timer and this destructor.
+     if (tick_timer_ != kInvalidTimerId) { reactor_.cancel(tick_timer_); tick_timer_ = kInvalidTimerId; }
++    if (read_budget_timer_ != kInvalidTimerId) { reactor_.cancel(read_budget_timer_); read_budget_timer_ = kInvalidTimerId; }
++    if (write_budget_timer_ != kInvalidTimerId) { reactor_.cancel(write_budget_timer_); write_budget_timer_ = kInvalidTimerId; }
+     if (!closed_) link_->close();
+ }
+ 
+@@ -163,6 +165,7 @@ void PeerConnection::close(const std::string& reason) {
+     // Drop the send backlog; rx_ is deliberately left alone — close() can be called
+     // from inside a message handler that still holds a ByteView into it.
+     tx_.clear();
++    send_runs_.clear();
+     if (obs_) obs_->on_closed(*this, reason);
+ }
+ 
+@@ -190,13 +193,31 @@ void PeerConnection::do_read() {
+     // the kqueue backend is edge-triggered, so leaving unread data behind would stall
+     // the connection until the peer happens to send more.
+     for (;;) {
+-        const ByteSpan into = rx_.prepare(read_size());
++        std::size_t amount = read_size();
++        bool content = false;
++        if (bandwidth_ && handshake_received_ && !mse_) {
++            if (rx_.size() < 5) amount = 5 - rx_.size();
++            else if (rx_.data()[4] == std::uint8_t(MessageId::Piece)) {
++                if (rx_.size() < 13) amount = 13 - rx_.size();
++                else { content = true; amount = rx_need_ > rx_.size() ? rx_need_ - rx_.size() : 1; }
++            } else if (rx_need_ > rx_.size()) amount = rx_need_ - rx_.size();
++            amount = bandwidth_->available(info_hash_,false,content,amount);
++            if (!amount) { link_->want_read(false); wait_budget(false,content); return; }
++        } else if (bandwidth_) {
++            // Bound eager handshake reads; MSE may carry a bounded initial payload.
++            amount = (std::min<std::size_t>)(amount, 68);
++            amount = bandwidth_->available(info_hash_,false,false,amount);
++            if (!amount) { link_->want_read(false); wait_budget(false,false); return; }
++        }
++        const auto spare = rx_.prepare(amount);
++        const ByteSpan into(spare.data(), amount); // prepare() may offer a larger tail
+ 
+         const PeerLink::IoResult r = link_->read(into);
+         if (r.status == PeerLink::Status::WouldBlock) return;
+         if (r.status == PeerLink::Status::Closed) { close("peer closed connection"); return; }
+         if (r.status == PeerLink::Status::Error)  { close("recv error"); return; }
+         const std::size_t n = r.bytes;
++        if (bandwidth_) bandwidth_->commit(info_hash_,false,content,n);
+ 
+         last_recv_ = std::chrono::steady_clock::now();
+ 
+@@ -522,7 +543,9 @@ void PeerConnection::send_piece(std::uint32_t piece, std::uint32_t offset, Bytes
+     write_u32_be(header + 5, piece);
+     write_u32_be(header + 9, offset);
+     queue(ByteView(header, sizeof(header)));
++    queue_content_ = true;
+     if (!data.empty()) queue(std::move(data));
++    queue_content_ = false;
+     flush();
+ }
+ 
+@@ -552,6 +575,7 @@ void PeerConnection::send_extended(std::uint8_t ext_id, ByteView payload) {
+ 
+ void PeerConnection::queue(ByteView bytes) {
+     if (closed_ || bytes.empty()) return;
++    note_queue(bytes.size(), queue_content_);
+     if (!rc4_active_) { tx_.append(bytes); return; }
+     // The source is not ours to modify (a message header on the stack, a bitfield
+     // owned by the picker), so encrypt through a scratch buffer. assign() reuses
+@@ -563,22 +587,39 @@ void PeerConnection::queue(ByteView bytes) {
+ 
+ void PeerConnection::queue(Bytes bytes) {
+     if (closed_ || bytes.empty()) return;
++    note_queue(bytes.size(), queue_content_);
+     if (rc4_active_) rc4_send_.process(bytes.data(), bytes.size());  // ours: encrypt in place
+     tx_.append(std::move(bytes));
+ }
+ 
+ void PeerConnection::flush() {
+     if (closed_) return;
++    if (tx_.allocated() > kSendHighWater) { close("slow consumer: send buffer overflow"); return; }
+ 
+     while (!tx_.empty()) {
+         // One syscall for the whole backlog, however many chunks it spans.
+         ByteView slices[kMaxSendSlices];
+-        const std::size_t count = tx_.gather(slices, kMaxSendSlices);
++        std::size_t count = tx_.gather(slices, kMaxSendSlices);
++        const bool content = !send_runs_.empty() && send_runs_.front().content;
++        std::size_t allowance = send_runs_.empty() ? 0 : send_runs_.front().bytes;
++        if (bandwidth_) allowance = bandwidth_->available(info_hash_,true,content,allowance);
++        if (!allowance) { want_write(false); wait_budget(true,content); return; }
++        std::size_t used=0, limited=0;
++        for (; limited<count && used<allowance; ++limited) {
++            const auto length = (std::min)(slices[limited].size(), allowance-used);
++            slices[limited] = ByteView(slices[limited].data(),length); used+=length;
++        }
++        count=limited;
+ 
+         const PeerLink::IoResult r = link_->write(slices, count);
+         if (r.status == PeerLink::Status::Ok && r.bytes > 0) {
+             last_sent_ = std::chrono::steady_clock::now();
+             tx_.pop_front(r.bytes);
++            if (bandwidth_) bandwidth_->commit(info_hash_,true,content,r.bytes);
++            send_runs_.front().bytes -= r.bytes;
++            if (!send_runs_.front().bytes) send_runs_.pop_front();
++            if(content && obs_) obs_->on_payload_sent(*this,r.bytes);
++            if(closed_) return;
+             continue;
+         }
+         // Nothing accepted: the link is congested and the backlog waits to be told
+@@ -596,6 +637,31 @@ void PeerConnection::flush() {
+     if (tx_.allocated() > kSendHighWater) close("slow consumer: send buffer overflow");
+ }
+ 
++void PeerConnection::note_queue(std::size_t bytes, bool content) {
++    if (!bytes) return;
++    if (!send_runs_.empty() && send_runs_.back().content == content) send_runs_.back().bytes += bytes;
++    else send_runs_.push_back({bytes,content});
++}
++
++void PeerConnection::wait_budget(bool upload, bool content) {
++    auto& timer = upload ? write_budget_timer_ : read_budget_timer_;
++    if (timer != kInvalidTimerId || !bandwidth_ || closed_) return;
++    timer = reactor_.schedule(bandwidth_->delay(info_hash_,upload,content), [this,upload] {
++        (upload ? write_budget_timer_ : read_budget_timer_) = kInvalidTimerId;
++        if (closed_) return;
++        if (upload) flush();
++        else { link_->want_read(true); do_read(); }
++    });
++}
++
++void PeerConnection::on_budget_ready() {
++    if(closed_) return;
++    if(read_budget_timer_!=kInvalidTimerId) { reactor_.cancel(read_budget_timer_);read_budget_timer_=kInvalidTimerId; }
++    if(write_budget_timer_!=kInvalidTimerId) { reactor_.cancel(write_budget_timer_);write_budget_timer_=kInvalidTimerId; }
++    flush(); if(closed_) return;
++    link_->want_read(true); do_read();
++}
++
+ void PeerConnection::want_write(bool on) {
+     if (on == want_write_ || closed_) return;
+     want_write_ = on;
+diff --git a/src/librats/bittorrent/peer_connection.h b/src/librats/bittorrent/peer_connection.h
+index d743737..fb3b9fe 100644
+--- a/src/librats/bittorrent/peer_connection.h
++++ b/src/librats/bittorrent/peer_connection.h
+@@ -26,6 +26,8 @@
+  */
+ 
+ #include "librats/bittorrent/bitfield.h"
++#include "librats/bittorrent/bandwidth_controller.h"
++#include <deque>
+ #include "librats/bittorrent/mse.h"
+ #include "librats/bittorrent/peer_link.h"
+ #include "librats/bittorrent/reactor.h"
+@@ -83,6 +85,7 @@ public:
+         virtual void on_bitfield(PeerConnection&, const Bitfield&) {}
+         virtual void on_request(PeerConnection&, std::uint32_t piece, std::uint32_t offset, std::uint32_t length) {}
+         virtual void on_piece(PeerConnection&, std::uint32_t piece, std::uint32_t offset, ByteView data) {}
++        virtual void on_payload_sent(PeerConnection&, std::size_t) {}
+         virtual void on_cancel(PeerConnection&, std::uint32_t piece, std::uint32_t offset, std::uint32_t length) {}
+         virtual void on_port(PeerConnection&, std::uint16_t port) {}
+         virtual void on_extended(PeerConnection&, std::uint8_t ext_id, ByteView payload) {}
+@@ -123,6 +126,8 @@ public:
+ 
+     /// Register with the reactor; an outgoing connection sends its handshake now.
+     void start();
++    void set_content_budget(BandwidthController* budget) { bandwidth_ = budget; }
++    void on_budget_ready();
+     /// Tear down: deregister, close the socket, fire on_closed once.
+     void close(const std::string& reason);
+ 
+@@ -209,7 +214,9 @@ private:
+     void queue(Bytes bytes);
+     /// Queue bytes that must bypass the payload cipher: the MSE handshake, which
+     /// carries its own encryption and establishes the cipher everything else uses.
+-    void queue_raw(Bytes bytes) { if (!closed_) tx_.append(std::move(bytes)); }
++    void queue_raw(Bytes bytes) { if (!closed_) { note_queue(bytes.size(),false); tx_.append(std::move(bytes)); } }
++    void note_queue(std::size_t bytes, bool content);
++    void wait_budget(bool upload, bool content);
+     /// Push the queue to the socket with one gather-send, (dis)arm write interest,
+     /// and enforce the send high-water mark. May close the connection.
+     void flush();
+@@ -257,6 +264,12 @@ private:
+     /// size rx_ for the whole message in one go. Peer-declared, hence capped.
+     std::size_t       rx_need_ = 0;
+     ChainedSendBuffer tx_;
++    struct SendRun { std::size_t bytes; bool content; };
++    std::deque<SendRun> send_runs_;
++    bool queue_content_ = false;
++    BandwidthController* bandwidth_ = nullptr;
++    TimerId read_budget_timer_ = kInvalidTimerId;
++    TimerId write_budget_timer_ = kInvalidTimerId;
+     bool              want_write_ = false;
+ 
+     // Timeout bookkeeping, all evaluated by the periodic tick().
+diff --git a/src/librats/bittorrent/peer_link.cpp b/src/librats/bittorrent/peer_link.cpp
+index 408e531..61dbb80 100644
+--- a/src/librats/bittorrent/peer_link.cpp
++++ b/src/librats/bittorrent/peer_link.cpp
+@@ -60,7 +60,13 @@ PeerLink::IoResult TcpPeerLink::write(const ByteView* slices, std::size_t count)
+ void TcpPeerLink::want_write(bool on) {
+     if (on == want_write_ || !is_valid_socket(sock_)) return;
+     want_write_ = on;
+-    reactor_.modify(sock_, PollIn | (on ? PollOut : PollNone));
++    reactor_.modify(sock_, (want_read_ ? PollIn : PollNone) | (on ? PollOut : PollNone));
++}
++
++void TcpPeerLink::want_read(bool on) {
++    if (on == want_read_ || !is_valid_socket(sock_)) return;
++    want_read_ = on;
++    reactor_.modify(sock_, (on ? PollIn : PollNone) | (want_write_ ? PollOut : PollNone));
+ }
+ 
+ void TcpPeerLink::close() {
+@@ -120,7 +126,7 @@ void UtpPeerLink::close() {
+ }
+ 
+ void UtpPeerLink::on_utp_readable() {
+-    if (obs_ != nullptr) obs_->on_link_readable();
++    if (obs_ != nullptr && want_read_) obs_->on_link_readable();
+ }
+ 
+ void UtpPeerLink::on_utp_writable() {
+diff --git a/src/librats/bittorrent/peer_link.h b/src/librats/bittorrent/peer_link.h
+index 8ecc211..b0131a0 100644
+--- a/src/librats/bittorrent/peer_link.h
++++ b/src/librats/bittorrent/peer_link.h
+@@ -83,6 +83,7 @@ public:
+     /// when the state actually changes, so an implementation may treat it as an
+     /// unconditional set.
+     virtual void want_write(bool on) = 0;
++    virtual void want_read(bool on) { (void)on; }
+ 
+     /// Tear down. Idempotent, and safe to call from inside an Observer callback.
+     virtual void close() = 0;
+@@ -99,6 +100,7 @@ public:
+     IoResult      read(ByteSpan into) override;
+     IoResult      write(const ByteView* slices, std::size_t count) override;
+     void          want_write(bool on) override;
++    void          want_read(bool on) override;
+     void          close() override;
+ 
+ private:
+@@ -108,6 +110,7 @@ private:
+     socket_t  sock_;
+     Observer* obs_        = nullptr;
+     bool      want_write_ = false;
++    bool      want_read_ = true;
+ };
+ 
+ /**
+@@ -128,6 +131,7 @@ public:
+     IoResult      read(ByteSpan into) override;
+     IoResult      write(const ByteView* slices, std::size_t count) override;
+     void          want_write(bool on) override { want_write_ = on; }
++    void          want_read(bool on) override { want_read_ = on; }
+     void          close() override;
+ 
+ private:
+@@ -136,6 +140,7 @@ private:
+     void on_utp_writable() override;
+     void on_utp_error(const std::string& why) override;
+ 
++    bool want_read_ = true;
+     utp::Manager& manager_;
+     utp::Stream*  stream_;
+     PeerLink::Observer* obs_  = nullptr;
+diff --git a/b/src/librats/bittorrent/rate_limiter.h b/src/librats/bittorrent/rate_limiter.h
+new file mode 100644
+index 0000000..3a23e45
+--- /dev/null
++++ b/src/librats/bittorrent/rate_limiter.h
+@@ -0,0 +1,51 @@
++#pragma once
++#include <algorithm>
++#include <cmath>
++#include <cstdint>
++#include <limits>
++
++namespace librats::bittorrent {
++// Reactor-owned bucket, time supplied by caller for deterministic tests.
++// Limited buckets start empty. Capacity is public: max(16KiB, min(R/10,1MiB)).
++class TokenBucket {
++public:
++    bool configure(long double rate, std::int64_t now) {
++        if(!std::isfinite(rate) || rate<0 || rate>9007199254740991.0L) return false;
++        refill(now);
++        if (rate == rate_) return true;
++        rate_ = rate;
++        capacity_ = std::uint64_t((std::max<long double>)(16384, (std::min<long double>)(rate / 10, 1048576)));
++        tokens_ = 0;
++        last_ = now;
++        return true;
++    }
++    void refill(std::int64_t now) {
++        if (last_ < 0 || now < last_) { last_ = now; tokens_ = 0; return; }
++        if (rate_) tokens_ = (std::min<long double>)(capacity_, tokens_ + (long double)(now-last_) * rate_ / 1000);
++        last_ = now;
++    }
++    std::uint64_t available(std::int64_t now) {
++        refill(now);
++        return rate_ ? std::uint64_t(tokens_) : (std::numeric_limits<std::uint64_t>::max)();
++    }
++    bool consume(std::uint64_t bytes, std::int64_t now) {
++        if (available(now) < bytes) return false;
++        if (rate_) tokens_ -= bytes;
++        return true;
++    }
++    std::int64_t nextReadyAt(std::uint64_t bytes, std::int64_t now) {
++        const auto have = available(now);
++        if (have >= bytes) return now;
++        const auto wait=std::ceil((long double)(bytes-have)*1000/rate_);
++        const auto maximum=(std::numeric_limits<std::int64_t>::max)();
++        if(wait>(long double)maximum-now) return maximum;
++        return now + std::int64_t(wait);
++    }
++    std::uint64_t capacity() const { return capacity_; }
++private:
++    long double rate_ = 0;
++    std::uint64_t capacity_ = 16384;
++    long double tokens_ = 0;
++    std::int64_t last_ = -1;
++};
++}
+diff --git a/src/librats/bittorrent/torrent.cpp b/src/librats/bittorrent/torrent.cpp
+index 2bb513c..bf6c092 100644
+--- a/src/librats/bittorrent/torrent.cpp
++++ b/src/librats/bittorrent/torrent.cpp
+@@ -42,7 +42,7 @@ bool Torrent::start_content() {
+     content_allowed_ = true;
+     if (!running_) start();
+     if (paused_) resume();
+-    if (state_ == State::Waiting) state_ = is_complete() ? State::Seeding : State::Downloading;
++    if (state_ == State::Waiting && !check_pending_) state_ = is_complete() ? State::Seeding : State::Downloading;
+     for (auto* peer : std::vector<PeerConnection*>(peers_)) if (alive(peer) && picker_) update_interest(*peer);
+     try_connect();
+     return true;
+@@ -118,8 +118,8 @@ void Torrent::start() {
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " \"" << info_.name() << "\" → Checking ("
+                                << info_.num_pieces() << " pieces, " << info_.total_size() << " bytes)");
+         // Pieces in resume_have_ are trusted (skip the hash); the rest are verified.
+-        disk_->async_check_files_detailed(resume_have_, nullptr,
+-            [this](DiskError error, Bitfield have) { on_io_check_complete(error, std::move(have)); });
++        check_pending_ = true;
++        begin_check();
+     } else {
+         // Magnet: no metadata yet — fetch the info dict from peers (BEP 9) first.
+         state_ = State::Metadata;
+@@ -141,6 +141,7 @@ void Torrent::start() {
+ void Torrent::stop() {
+     if (!running_) return;
+     running_ = false;
++    if(bandwidth_timer_!=kInvalidTimerId) { reactor_.cancel(bandwidth_timer_); bandwidth_timer_=kInvalidTimerId; }
+     ++generation_;
+     if (io_retry_timer_ != kInvalidTimerId) { reactor_.cancel(io_retry_timer_); io_retry_timer_ = kInvalidTimerId; }
+     paused_  = false;
+@@ -293,6 +294,9 @@ void Torrent::schedule_tick() {
+ void Torrent::tick() {
+     if (!running_) return;
+     ++tick_count_;
++    if (check_pending_ && !paused_) begin_check();
++    if (check_pending_) { schedule_tick(); return; }
++    refill_all();
+ 
+     // Paused: no swarm activity — skip DHT/tracker announces, dialing, choking and
+     // PEX. Keep the tick alive so resume() picks straight back up. (peers_ is empty
+@@ -393,6 +397,7 @@ void Torrent::on_have(PeerConnection& pc, std::uint32_t piece) {
+ void Torrent::on_choke(PeerConnection& pc, bool peer_choking) {
+     if (!picker_) return;
+     if (peer_choking) {
++        release_requests(&pc);
+         picker_->cancel_peer(&pc);  // they dropped our outstanding requests
+         outstanding_[&pc] = 0;
+         request_time_.erase(&pc);
+@@ -424,8 +429,19 @@ void Torrent::refill(PeerConnection& pc) {
+     const int before = outstanding_[&pc];
+     auto blocks = picker_->pick_blocks(pc.peer_bitfield(), budget, &pc);
+     for (const PieceBlock& b : blocks) {
++        const auto length = picker_->block_size(b.piece,b.block);
++        if (auto* bw=host_.bandwidth_controller()) {
++            if (!bw->reserve_download(info_hash(),length)) {
++                if(bandwidth_timer_==kInvalidTimerId) bandwidth_timer_=reactor_.schedule(bw->request_delay(info_hash(),length),[this]{
++                    bandwidth_timer_=kInvalidTimerId;refill_all();
++                });
++                break;
++            }
++            reservations_[&pc][(std::uint64_t(b.piece)<<32) | (b.block*kBlockSize)] = length;
++        }
+         picker_->mark_requested(b, &pc);
+         pc.send_request(b.piece, b.block * kBlockSize, picker_->block_size(b.piece, b.block));
++        if (!alive(&pc)) break;
+         ++outstanding_[&pc];
+     }
+     if (!blocks.empty())
+@@ -440,6 +456,7 @@ void Torrent::refill(PeerConnection& pc) {
+ }
+ 
+ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t offset, ByteView data) {
++    release_block(&pc,piece,offset);
+     if (!running_ || paused_ || last_error_ || !content_allowed_ || !picker_ || piece >= info_.num_pieces()) return;
+ 
+     // Reject a malformed or unsolicited block before it can index the picker's
+@@ -481,6 +498,7 @@ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t of
+     const std::vector<const void*> others = picker_->mark_writing(block, &pc);
+     for (const void* o : others) {
+         auto* opc = static_cast<PeerConnection*>(const_cast<void*>(o));
++        release_block(opc,piece,block.block*kBlockSize);
+         if (!alive(opc)) continue;
+         auto it = outstanding_.find(opc);
+         if (it != outstanding_.end() && it->second > 0) --it->second;  // freed a slot
+@@ -516,6 +534,7 @@ void Torrent::check_request_timeouts() {
+     // pick them, and leave the peer idle (no re-request this round) so we don't
+     // immediately hand the same blocks back to the peer that just stalled.
+     for (PeerConnection* pc : stalled) {
++        release_requests(pc);
+         picker_->cancel_peer(pc);
+         outstanding_[pc] = 0;
+         request_time_.erase(pc);
+@@ -615,8 +634,7 @@ void Torrent::on_request(PeerConnection& pc, std::uint32_t piece, std::uint32_t
+         if (!paused_ && content_allowed_ && alive(peer)) {
+             const std::size_t sent = data.size();  // data is about to be moved away
+             peer->send_piece(piece, offset, std::move(data));
+-            bytes_uploaded_    += sent;
+-            recent_up_[peer]   += sent;  // seed-choking score for this window
++            (void)sent; // real transport acceptance is counted by on_payload_sent
+         }
+     });
+ }
+@@ -691,6 +709,7 @@ bool Torrent::alive(PeerConnection* pc) const {
+ }
+ 
+ void Torrent::remove_peer(PeerConnection* pc) {
++    release_requests(pc);
+     auto it = std::find(peers_.begin(), peers_.end(), pc);
+     if (it == peers_.end()) return;
+     if (picker_) {
+@@ -839,8 +858,31 @@ void Torrent::promote_to_downloading() {
+         picker_->inc_availability(pc->peer_bitfield());
+         update_interest(*pc);
+     }
+-    disk_->async_check_files_detailed(Bitfield{}, nullptr,
+-        [this](DiskError error, Bitfield have) { on_io_check_complete(error, std::move(have)); });
++    check_pending_ = true;
++    begin_check();
++}
++
++void Torrent::begin_check() {
++    if (!check_pending_ || !disk_) return;
++    auto slot = host_.acquire_check_slot();
++    if (!slot) { state_ = State::Checking; return; }
++    check_pending_ = false;
++    state_ = State::Checking;
++    disk_->async_check_files_detailed(resume_have_, nullptr,
++        [this,slot=std::move(slot)](DiskError error, Bitfield have) { on_io_check_complete(error,std::move(have)); });
++}
++
++void Torrent::release_block(PeerConnection* pc, std::uint32_t piece, std::uint32_t offset) {
++    auto p=reservations_.find(pc); if(p==reservations_.end()) return;
++    auto b=p->second.find((std::uint64_t(piece)<<32)|offset); if(b==p->second.end()) return;
++    if(auto* bw=host_.bandwidth_controller()) bw->release_reservation(info_hash(),b->second);
++    p->second.erase(b);
++}
++
++void Torrent::release_requests(PeerConnection* pc) {
++    auto p=reservations_.find(pc); if(p==reservations_.end()) return;
++    if(auto* bw=host_.bandwidth_controller()) for(auto [key,size]:p->second) bw->release_reservation(info_hash(),size);
++    reservations_.erase(p);
+ }
+ 
+ // ---- peer exchange (BEP 11) ----
+diff --git a/src/librats/bittorrent/torrent.h b/src/librats/bittorrent/torrent.h
+index 1a88d7f..3e294d9 100644
+--- a/src/librats/bittorrent/torrent.h
++++ b/src/librats/bittorrent/torrent.h
+@@ -53,6 +53,8 @@ class Torrent;
+ class RATS_API TorrentHost {
+ public:
+     virtual ~TorrentHost() = default;
++    virtual BandwidthController* bandwidth_controller() { return nullptr; }
++    virtual std::shared_ptr<void> acquire_check_slot() { return std::make_shared<int>(0); }
+     /// Dial a peer for @p torrent. The endpoint carries the PeerList's per-peer
+     /// preferences (MSE alternation, uTP-or-TCP); the host combines them with the
+     /// session's own policy, which may override either.
+@@ -89,6 +91,13 @@ public:
+     void set_content_allowed(bool allowed);
+     bool content_allowed() const noexcept { return content_allowed_; }
+     void verify_resume_on_start() { resume_have_ = {}; }
++    void begin_check();
++    void on_payload_sent(PeerConnection& peer, std::size_t bytes) override { bytes_uploaded_ += bytes; recent_up_[&peer] += bytes; }
++    bool check_pending() const { return check_pending_; }
++    void wake_bandwidth() {
++        if(bandwidth_timer_!=kInvalidTimerId) { reactor_.cancel(bandwidth_timer_); bandwidth_timer_=kInvalidTimerId; }
++        refill_all();
++    }
+     const DiskError& last_error() const noexcept { return last_error_; }
+     std::uint64_t verified_bytes() const noexcept { return verified_bytes_; }
+     std::uint64_t hash_failures() const noexcept { return hash_failures_; }
+@@ -264,6 +273,11 @@ private:
+ 
+     std::vector<PeerConnection*>                            peers_;
+     std::unordered_map<PeerConnection*, int>                outstanding_;
++    std::map<PeerConnection*, std::map<std::uint64_t,std::size_t>> reservations_;
++    void release_requests(PeerConnection* pc);
++    void release_block(PeerConnection* pc, std::uint32_t piece, std::uint32_t offset);
++    bool check_pending_ = false;
++    TimerId bandwidth_timer_ = kInvalidTimerId;
+     /// Time of the last progress with each peer (a block received, or the moment
+     /// we started waiting on a fresh batch). Drives the request-timeout snub.
+     std::unordered_map<PeerConnection*, std::chrono::steady_clock::time_point> request_time_;

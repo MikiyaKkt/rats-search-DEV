@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="ru_RU">
 <context>
@@ -2491,5 +2491,89 @@ Do you want to install the update now?</source>
         <source>Updates not supported on this platform</source>
         <translation>Обновления не поддерживаются на этой платформе</translation>
     </message>
+</context>
+<context><name>DownloadScheduleWidget</name>
+<message><source>Add interval</source><translation>Добавить интервал</translation></message>
+<message><source>Days</source><translation>Дни</translation></message>
+<message><source>Download KiB/s</source><translation>Загрузка КиБ/с</translation></message>
+<message><source>Enable weekly bandwidth schedule</source><translation>Включить недельное расписание скорости</translation></message>
+<message><source>Fri</source><translation>Пт</translation></message>
+<message><source>From</source><translation>С</translation></message>
+<message><source>IANA time zone, e.g. Asia/Tokyo</source><translation>Часовой пояс IANA, например Asia/Tokyo</translation></message>
+<message><source>Intervals use local wall time and may cross midnight. End 00:00 means midnight. Overlaps are rejected. Zero adds no rate cap; global and task caps still apply. DST repeated minutes use the same rule.</source><translation>Интервалы используют местное время и могут пересекать полночь. Конец 00:00 означает полночь. Пересечения запрещены. Ноль не добавляет лимит; общие лимиты и лимиты задачи действуют. Повторяющиеся минуты при смене времени используют то же правило.</translation></message>
+<message><source>Mon</source><translation>Пн</translation></message>
+<message><source>Pause content</source><translation>Приостановить передачу данных</translation></message>
+<message><source>Remove interval</source><translation>Удалить интервал</translation></message>
+<message><source>Sat</source><translation>Сб</translation></message>
+<message><source>Sun</source><translation>Вс</translation></message>
+<message><source>Thu</source><translation>Чт</translation></message>
+<message><source>Time zone</source><translation>Часовой пояс</translation></message>
+<message><source>Tue</source><translation>Вт</translation></message>
+<message><source>Until</source><translation>До</translation></message>
+<message><source>Upload KiB/s</source><translation>Отдача КиБ/с</translation></message>
+<message><source>Wed</source><translation>Ср</translation></message>
+</context>
+<context><name>PieceMapWidget</name>
+<message><source>Green: verified; blue: active; gray: wanted; dark: skipped. Each cell may aggregate multiple pieces.</source><translation>Зелёный: проверено; синий: активно; серый: требуется; тёмный: пропущено. Ячейка может объединять несколько частей.</translation></message>
+<message><source>Piece map</source><translation>Карта частей</translation></message>
+<message><source>Piece map is available after metadata and storage startup</source><translation>Карта доступна после загрузки метаданных и запуска хранилища</translation></message>
+</context>
+<context><name>SeedingPolicyWidget</name>
+<message><source> s</source><translation> с</translation></message>
+<message><source>Active seeding time</source><translation>Время активной раздачи</translation></message>
+<message><source>Inherit global seeding conditions</source><translation>Наследовать общие условия раздачи</translation></message>
+<message><source>Share ratio</source><translation>Коэффициент раздачи</translation></message>
+<message><source>Stop when all enabled conditions are reached</source><translation>Остановить при выполнении всех включённых условий</translation></message>
+<message><source>Stop when any condition is reached</source><translation>Остановить при выполнении любого условия</translation></message>
+<message><source>Unlimited</source><translation>Без ограничений</translation></message>
+</context>
+<context><name>SettingsDialog</name>
+<message><source>Active downloads</source><translation>Активные загрузки</translation></message>
+<message><source>Active seeds</source><translation>Активные раздачи</translation></message>
+<message><source>BT connections per task</source><translation>Соединений BT на задачу</translation></message>
+<message><source>BT connections total</source><translation>Всего соединений BT</translation></message>
+<message><source>Default seeding conditions</source><translation>Условия раздачи по умолчанию</translation></message>
+<message><source>Disabled</source><translation>Отключено</translation></message>
+<message><source>Download settings</source><translation>Настройки загрузки</translation></message>
+<message><source>File checks</source><translation>Одновременные проверки</translation></message>
+<message><source>Global download limit</source><translation>Общее ограничение загрузки</translation></message>
+<message><source>Global upload limit</source><translation>Общее ограничение отдачи</translation></message>
+<message><source>Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files.</source><translation>Лимиты действуют для данных BitTorrent по TCP и uTP. Протокол и метаданные используют отдельный бюджет 64 КиБ/с. Кеш включается по желанию; условия раздачи не удаляют файлы.</translation></message>
+<message><source>Metadata tasks</source><translation>Задачи метаданных</translation></message>
+<message><source>Shared read cache</source><translation>Общий кеш чтения</translation></message>
+<message><source>Unlimited</source><translation>Без ограничений</translation></message>
+</context>
+<context><name>TaskDownloadDialog</name>
+<message><source>-1 inherits; 0 removes the task cap. Global caps always apply. Confirm files before downloading content. Skipped boundary data is kept in .parts for piece verification.</source><translation>-1 наследует общие настройки; 0 снимает лимит задачи. Общие лимиты действуют всегда. Подтвердите файлы перед загрузкой. Граничные данные пропущенных файлов сохраняются в .parts для проверки.</translation></message>
+<message><source>Automatic maximum</source><translation>Автоматический максимум</translation></message>
+<message><source>Automatic minimum</source><translation>Автоматический минимум</translation></message>
+<message><source>Automatically adapt request window</source><translation>Автоматически изменять окно запросов</translation></message>
+<message><source>BT connections</source><translation>Соединения BT</translation></message>
+<message><source>Confirm file selection</source><translation>Подтвердить выбор файлов</translation></message>
+<message><source>Download limit</source><translation>Ограничение загрузки</translation></message>
+<message><source>Download strategy</source><translation>Стратегия загрузки</translation></message>
+<message><source>File</source><translation>Файл</translation></message>
+<message><source>File selection</source><translation>Выбор файлов</translation></message>
+<message><source>Filter files by name or extension</source><translation>Фильтр по имени или расширению</translation></message>
+<message><source>High</source><translation>Высокий</translation></message>
+<message><source>Inherit</source><translation>Наследовать общие настройки</translation></message>
+<message><source>Low</source><translation>Низкий</translation></message>
+<message><source>Manual requests per peer</source><translation>Запросов на узел вручную</translation></message>
+<message><source>Normal</source><translation>Обычный</translation></message>
+<message><source>Priority</source><translation>Приоритет</translation></message>
+<message><source>Queue priority</source><translation>Приоритет в очереди</translation></message>
+<message><source>Rarest first</source><translation>Сначала редкие части</translation></message>
+<message><source>Recheck</source><translation>Перепроверить</translation></message>
+<message><source>Recheck / retry files</source><translation>Перепроверить / повторить файлы</translation></message>
+<message><source>Restart seeding after goal</source><translation>Возобновить раздачу после достижения цели</translation></message>
+<message><source>Seeding conditions</source><translation>Условия раздачи</translation></message>
+<message><source>Select matching files</source><translation>Выбрать подходящие файлы</translation></message>
+<message><source>Selected file first/last pieces</source><translation>Сначала начало и конец выбранных файлов</translation></message>
+<message><source>Sequential</source><translation>Последовательно</translation></message>
+<message><source>Skip matching files</source><translation>Пропустить подходящие файлы</translation></message>
+<message><source>Task download settings</source><translation>Настройки загрузки задачи</translation></message>
+<message><source>Task settings</source><translation>Настройки задачи</translation></message>
+<message><source>Upload limit</source><translation>Ограничение отдачи</translation></message>
+<message><source>Verified</source><translation>Проверено</translation></message>
 </context>
 </TS>

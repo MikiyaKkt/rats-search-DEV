@@ -3,6 +3,8 @@
 #include "data/torrent_repository.h"
 #include "format.h"
 #include "services/download_service.h"
+#include "taskdownloaddialog.h"
+#include <QPushButton>
 #include <QHBoxLayout>
 #include <QStyle>
 #include <algorithm>
@@ -37,6 +39,8 @@ void TorrentFilesWidget::setupUi()
     headerLayout->addWidget(infoLabel_);
 
     headerLayout->addStretch();
+    auto* settings=new QPushButton(tr("Choose download files"),this);headerLayout->addWidget(settings);
+    connect(settings,&QPushButton::clicked,this,[this]{if(app_ && app_->downloads() && app_->downloads()->isDownloading(currentHash_)) {TaskDownloadDialog dialog(app_->downloads(),currentHash_,this);dialog.exec();}});
     mainLayout->addLayout(headerLayout);
 
     // File tree
@@ -57,7 +61,7 @@ void TorrentFilesWidget::setupUi()
     filesTree_->setColumnWidth(1, 100);
     filesTree_->setColumnWidth(2, 70);
 
-    connect(filesTree_, &QTreeWidget::itemChanged, this, &TorrentFilesWidget::onFileItemChanged);
+
 
     mainLayout->addWidget(filesTree_, 1);
 
@@ -132,37 +136,6 @@ void TorrentFilesWidget::clear()
     infoLabel_->setText(tr("Select a torrent to view files"));
 }
 
-QList<int> TorrentFilesWidget::getSelectedFileIndices() const
-{
-    QList<int> indices;
-
-    for (int i = 0; i < filesTree_->topLevelItemCount(); ++i) {
-        collectSelectedFiles(filesTree_->topLevelItem(i), indices);
-    }
-
-    return indices;
-}
-
-void TorrentFilesWidget::onFileItemChanged(QTreeWidgetItem* item, int column)
-{
-    if (column != 2)
-        return; // Only care about checkbox column
-
-    Q_UNUSED(item);
-
-    if (currentHash_.isEmpty() || fileCount_ <= 0 || !app_ || !app_->downloads())
-        return;
-
-    // No-op unless this torrent is an active download, which is what we want:
-    // the tree also shows files of torrents that are only being browsed.
-    QVector<bool> selection(fileCount_, false);
-    for (int index : getSelectedFileIndices()) {
-        if (index >= 0 && index < fileCount_)
-            selection[index] = true;
-    }
-    app_->downloads()->selectFiles(currentHash_, selection);
-}
-
 TorrentFilesWidget::FileTreeNode* TorrentFilesWidget::buildFileTree(const QVector<File>& files)
 {
     FileTreeNode* root = new FileTreeNode();
@@ -215,7 +188,9 @@ void TorrentFilesWidget::addTreeNodeToWidget(FileTreeNode* node, QTreeWidgetItem
 
     // Set checkbox for files
     if (node->isFile) {
-        item->setCheckState(2, Qt::Checked);
+        // Browsing never changes an active download. Edit through the explicit
+        // versioned confirmation dialog so sorted tree rows cannot alter indices.
+        item->setText(2,tr("Preview"));
         item->setData(0, Qt::UserRole, node->fileIndex);
     } else {
         item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
@@ -292,19 +267,4 @@ QString TorrentFilesWidget::getFileTypeIcon(const QString& filename) const
         return "💿";
 
     return "📄"; // Default file icon
-}
-
-void TorrentFilesWidget::collectSelectedFiles(QTreeWidgetItem* item, QList<int>& indices) const
-{
-    if (!item)
-        return;
-
-    int fileIndex = item->data(0, Qt::UserRole).toInt();
-    if (fileIndex >= 0 && item->checkState(2) == Qt::Checked) {
-        indices.append(fileIndex);
-    }
-
-    for (int i = 0; i < item->childCount(); ++i) {
-        collectSelectedFiles(item->child(i), indices);
-    }
 }

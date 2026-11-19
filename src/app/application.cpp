@@ -47,6 +47,7 @@ struct Application::Private {
 
     // Adapters (owned, constructed in dependency order)
     std::unique_ptr<ConfigStore> config;
+    bool configValid=true;
     std::unique_ptr<FavoritesStore> favorites;
     std::unique_ptr<SearchHistoryStore> searchHistory;
     std::unique_ptr<data::Manticore> manticore;
@@ -93,7 +94,7 @@ Application::Application(Options options, QObject* parent) : QObject(parent), d_
     const QString dataDir = d_->options.dataDirectory;
     auto* cfg = new ConfigStore(dataDir + QStringLiteral("/rats.json"), this);
     d_->config.reset(cfg);
-    d_->config->load();
+    d_->configValid=d_->config->load();
 
     // Translators must be installed before any front-end builds its UI, so the
     // first tr() call already resolves in the user's language.
@@ -166,6 +167,8 @@ void Application::applyConfig()
     d_->filter->setSettings(c->filterSettings());
 
     d_->downloads->setDefaultDownloadPath(c->downloadPath());
+    d_->downloads->setPolicyPersistence([this](const service::GlobalDownloadPolicy& p) { return d_->config->setDownloadPolicy(p); });
+    d_->downloads->configurePolicy(c->downloadPolicy());
     d_->trackers->setCountScrapingEnabled(c->trackersEnabled());
     d_->trackers->setInfoScrapingEnabled(c->trackersEnabled());
     d_->replication->setEnabled(c->p2pReplication());
@@ -239,6 +242,7 @@ void Application::wireSignals()
 
 bool Application::start()
 {
+    if(!d_->configValid){qCritical()<<"[Application] configuration requires recovery; refusing to start with fallback download limits";return false;}
     if (d_->running)
         return true;
 

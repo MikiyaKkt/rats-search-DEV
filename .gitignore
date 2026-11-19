@@ -1,4 +1,6 @@
 # Build directories
+.tools/
+dist/
 build/
 build-*/
 cmake-build-*/
@@ -17,6 +19,8 @@ ui_*.h
 *.jsc
 Makefile*
 *build-*
+!/build-windows.cmd
+!/scripts/build-windows.ps1
 *.autosave
 
 # C++

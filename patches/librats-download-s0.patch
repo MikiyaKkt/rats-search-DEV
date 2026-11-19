@@ -1,0 +1,1124 @@
+diff --git a/src/librats/bittorrent/client.cpp b/src/librats/bittorrent/client.cpp
+index f8a1fab..c906c28 100644
+--- a/src/librats/bittorrent/client.cpp
++++ b/src/librats/bittorrent/client.cpp
+@@ -393,11 +393,51 @@ void Client::announce_to_dht(const InfoHash& info_hash, std::uint16_t port,
+     });
+ }
+ 
++CreateResult Client::create_torrent(const TorrentInfo& info, const std::string& save_path, CreateOptions options) {
++    return run_on_reactor([&]() -> CreateResult {
++        if (!info.is_valid() || !info.has_metadata()) return {false, {}, "invalidMetadata"};
++        if (torrents_.count(info.info_hash())) return {false, info.info_hash(), "alreadyExists"};
++        auto* torrent = add_torrent_impl(info, save_path, StartMode::Inactive);
++        if (!torrent) return {false, info.info_hash(), "engineRejected"};
++        if (options.load_resume) torrent->try_load_resume_data();
++        if (options.verify_existing) torrent->verify_resume_on_start();
++        torrent->set_content_allowed(options.mode == StartMode::Automatic);
++        if (options.mode != StartMode::Inactive) torrent->start();
++        return {true, info.info_hash(), {}};
++    });
++}
++
++CreateResult Client::create_magnet(const std::string& uri, const std::string& save_path, CreateOptions options) {
++    return run_on_reactor([&]() -> CreateResult {
++        const auto info = TorrentInfo::from_magnet(uri);
++        if (!info || !info->is_valid()) return {false, {}, "invalidMagnet"};
++        if (torrents_.count(info->info_hash())) return {false, info->info_hash(), "alreadyExists"};
++        auto* torrent = add_magnet_impl(uri, save_path, options.load_resume, options.mode, options.verify_existing);
++        return {torrent != nullptr, info->info_hash(), torrent ? "" : "engineRejected"};
++    });
++}
++
++bool Client::start_metadata(const InfoHash& hash) {
++    return run_on_reactor([&] {
++        const auto i = torrents_.find(hash);
++        if (i == torrents_.end() || i->second->last_error()) return false;
++        i->second->start_metadata_only();
++        return true;
++    });
++}
++
++bool Client::start_content(const InfoHash& hash) {
++    return run_on_reactor([&] {
++        const auto i = torrents_.find(hash);
++        return i != torrents_.end() && i->second->start_content();
++    });
++}
++
+ Torrent* Client::add_torrent(const TorrentInfo& info, const std::string& save_path) {
+     return run_on_reactor([&] { return add_torrent_impl(info, save_path); });
+ }
+ 
+-Torrent* Client::add_torrent_impl(const TorrentInfo& info, const std::string& save_path) {
++Torrent* Client::add_torrent_impl(const TorrentInfo& info, const std::string& save_path, StartMode mode) {
+     if (!info.is_valid() || !info.has_metadata()) {
+         LOG_WARN("bt.client", "rejected invalid/incomplete torrent");
+         return nullptr;
+@@ -410,7 +450,8 @@ Torrent* Client::add_torrent_impl(const TorrentInfo& info, const std::string& sa
+     Torrent* raw = t.get();
+     torrents_.emplace(ih, std::move(t));
+     LOG_INFO("bt.client", "added torrent " << short_hash(ih) << " \"" << info.name() << "\" → " << path);
+-    raw->start();
++    raw->set_content_allowed(mode == StartMode::Automatic);
++    if (mode != StartMode::Inactive) raw->start();
+     return raw;
+ }
+ 
+@@ -422,7 +463,7 @@ Torrent* Client::add_magnet_resumed(const std::string& magnet_uri, const std::st
+     return run_on_reactor([&] { return add_magnet_impl(magnet_uri, save_path, /*resume=*/true); });
+ }
+ 
+-Torrent* Client::add_magnet_impl(const std::string& magnet_uri, const std::string& save_path, bool resume) {
++Torrent* Client::add_magnet_impl(const std::string& magnet_uri, const std::string& save_path, bool resume, StartMode mode, bool verify_existing) {
+     auto info = TorrentInfo::from_magnet(magnet_uri);
+     if (!info || !info->is_valid()) {
+         LOG_WARN("bt.client", "rejected invalid magnet uri");
+@@ -439,8 +480,10 @@ Torrent* Client::add_magnet_impl(const std::string& magnet_uri, const std::strin
+     // set if a resume file exists next to the download.
+     if (resume && raw->try_load_resume_data())
+         LOG_INFO("bt.client", "restored resume data for " << short_hash(ih));
++    if (verify_existing) raw->verify_resume_on_start();
+     LOG_INFO("bt.client", "added magnet" << (resume ? " (resumed) " : " ") << short_hash(ih) << " → " << path);
+-    raw->start();
++    raw->set_content_allowed(mode == StartMode::Automatic);
++    if (mode != StartMode::Inactive) raw->start();
+     return raw;
+ }
+ 
+@@ -519,16 +562,24 @@ TorrentStatus Client::torrent_status(const InfoHash& info_hash) {
+         s.exists       = true;
+         s.name         = info.name();
+         s.has_metadata = t->has_metadata();
+-        s.is_complete  = t->is_complete();
++        s.is_complete  = t->is_complete() && !t->last_error() && t->state() != Torrent::State::Checking;
+         s.paused       = t->is_paused();
+         s.progress     = t->progress();
+         s.downloaded   = t->bytes_downloaded();
++        s.verified = t->verified_bytes();
++        s.hash_failures = t->hash_failures();
++        s.state = t->state();
++        s.error = t->last_error();
++        s.content_allowed = t->content_allowed();
+         s.uploaded     = t->bytes_uploaded();
+         s.num_peers    = t->num_peers();
+         if (info.has_metadata()) {
+             s.total_size = std::uint64_t(info.total_size());
+-            for (const FileEntry& f : info.files().files())
+-                s.files.push_back({f.path, f.size});
++            const auto verified = t->file_verified_bytes();
++            std::size_t i = 0;
++            for (const FileEntry& f : info.files().files()) {
++                s.files.push_back({f.path, f.size, verified[i++]});
++            }
+         }
+         return s;
+     });
+diff --git a/src/librats/bittorrent/client.h b/src/librats/bittorrent/client.h
+index 2f48e9e..63563db 100644
+--- a/src/librats/bittorrent/client.h
++++ b/src/librats/bittorrent/client.h
+@@ -42,11 +42,28 @@
+ 
+ namespace librats::bittorrent {
+ 
++enum class StartMode { Inactive, MetadataOnly, Automatic };
++struct CreateOptions {
++    StartMode mode = StartMode::Inactive;
++    bool load_resume = false;
++    bool verify_existing = true;
++};
++struct CreateResult {
++    bool applied = false;
++    InfoHash hash{};
++    std::string error_code;
++};
++
+ /// A thread-safe snapshot of one torrent's state. Produced by Client::torrent_status
+ /// on the reactor thread so callers on any thread get a consistent view without
+ /// touching the (lock-free, reactor-owned) Torrent directly.
+ struct TorrentStatus {
+-    struct File { std::string path; std::int64_t size = 0; };
++    struct File { std::string path; std::int64_t size = 0; std::uint64_t verified = 0; };
++    std::uint64_t verified = 0;
++    std::uint64_t hash_failures = 0;
++    Torrent::State state = Torrent::State::Stopped;
++    bool content_allowed = true;
++    DiskError error;
+ 
+     bool          exists       = false;  ///< false if no such torrent (rest is default)
+     std::string   name;
+@@ -107,6 +124,10 @@ public:
+     ~Client() override;
+ 
+     Client(const Client&) = delete;
++    CreateResult create_torrent(const TorrentInfo& info, const std::string& save_path, CreateOptions options = {});
++    CreateResult create_magnet(const std::string& uri, const std::string& save_path, CreateOptions options = {});
++    bool start_metadata(const InfoHash& hash);
++    bool start_content(const InfoHash& hash);
+     Client& operator=(const Client&) = delete;
+ 
+     /// Wire up the listener + housekeeping timers. Must run on the reactor thread
+@@ -240,8 +261,10 @@ private:
+ 
+     // Unsynchronised implementations — only ever run on the reactor thread (either
+     // directly in the single-threaded/test path or via run_on_reactor()).
+-    Torrent* add_torrent_impl(const TorrentInfo& info, const std::string& save_path);
+-    Torrent* add_magnet_impl(const std::string& magnet_uri, const std::string& save_path, bool resume);
++    Torrent* add_torrent_impl(const TorrentInfo& info, const std::string& save_path,
++                             StartMode mode = StartMode::Automatic);
++    Torrent* add_magnet_impl(const std::string& magnet_uri, const std::string& save_path, bool resume,
++                            StartMode mode = StartMode::Automatic, bool verify_existing = false);
+     Torrent* add_torrent_with_resume_impl(const TorrentInfo& info, const ResumeData& resume,
+                                           const std::string& save_path);
+     void     remove_torrent_impl(const InfoHash& info_hash);
+diff --git a/src/librats/bittorrent/disk_io.cpp b/src/librats/bittorrent/disk_io.cpp
+index 8663b75..83b1f47 100644
+--- a/src/librats/bittorrent/disk_io.cpp
++++ b/src/librats/bittorrent/disk_io.cpp
+@@ -9,6 +9,13 @@
+ #include <utility>
+ 
+ namespace librats::bittorrent {
++namespace {
++DiskError disk_error(bool ok) {
++    if (ok) return {};
++    const auto error = last_file_error();
++    return classify_fs_error(error.code, error.operation.empty() ? "disk" : error.operation, error.path);
++}
++}
+ 
+ ThreadedDiskIo::ThreadedDiskIo(const TorrentInfo& info, std::string save_path,
+                                CompletionPoster poster, Config config)
+@@ -126,84 +133,112 @@ bool ThreadedDiskIo::read_range(std::uint32_t piece, std::uint32_t offset, std::
+         const std::string path = file_path(s.file_index);
+         // On the check path a missing/short file is expected (piece not yet on
+         // disk); probe the size first so we don't trip read_file_chunk's error log.
+-        if (allow_short && get_file_size(path.c_str()) < s.offset + s.size) return false;
++        if (allow_short) {
++            const auto size = get_file_size(path.c_str());
++            if (size < s.offset + s.size) {
++                const auto error = last_file_error();
++                // Missing/short files are expected during a recheck. Permission
++                // and malformed-path failures are not ordinary missing pieces.
++                if (size >= 0 || error.code == ENOENT) clear_file_error();
++                return false;
++            }
++        }
+         if (!read_file_chunk(path, std::uint64_t(s.offset), out.data() + out_pos, std::size_t(s.size)))
+             return false;
+         out_pos += s.size;
+     }
++    if (out_pos != length) { errno = EINVAL; return false; }
+     if (use_store) store_.overlay(piece, offset, out);
+     return true;
+ }
+ 
+-void ThreadedDiskIo::async_read(std::uint32_t piece, std::uint32_t offset, std::uint32_t length,
+-                                DiskReadHandler handler) {
++void ThreadedDiskIo::async_read(std::uint32_t piece, std::uint32_t offset, std::uint32_t length, DiskReadHandler handler) {
++    async_read_detailed(piece, offset, length, [handler = std::move(handler)](DiskError error, Bytes data) {
++        if (handler) handler(!error, std::move(data));
++    });
++}
++void ThreadedDiskIo::async_write(std::uint32_t piece, std::uint32_t offset, Bytes data, DiskWriteHandler handler) {
++    async_write_detailed(piece, offset, std::move(data), [handler = std::move(handler)](DiskError error) {
++        if (handler) handler(!error);
++    });
++}
++void ThreadedDiskIo::async_hash(std::uint32_t piece, DiskHashHandler handler) {
++    async_hash_detailed(piece, [handler = std::move(handler)](DiskError error, std::array<std::uint8_t, 20> digest) {
++        if (handler) handler(!error, digest);
++    });
++}
++void ThreadedDiskIo::async_check_files(Bitfield trusted, DiskCheckProgress progress, DiskCheckHandler handler) {
++    async_check_files_detailed(std::move(trusted), std::move(progress),
++        [handler = std::move(handler)](DiskError, Bitfield have) { if (handler) handler(std::move(have)); });
++}
++
++void ThreadedDiskIo::async_read_detailed(std::uint32_t piece, std::uint32_t offset, std::uint32_t length,
++                                        std::function<void(DiskError, Bytes)> handler) {
+     enqueue([this, piece, offset, length, handler = std::move(handler)]() mutable {
++        clear_file_error();
+         Bytes out;
+-        const bool ok = read_range(piece, offset, length, out, /*use_store=*/true, /*allow_short=*/false);
+-        complete([handler = std::move(handler), ok, out = std::move(out)]() mutable {
+-            if (handler) handler(ok, std::move(out));
++        const bool ok = read_range(piece, offset, length, out, true, false);
++        auto error = disk_error(ok);
++        complete([handler = std::move(handler), error, out = std::move(out)]() mutable {
++            if (handler) handler(error, std::move(out));
+         });
+     });
+ }
+ 
+-void ThreadedDiskIo::async_write(std::uint32_t piece, std::uint32_t offset, Bytes data,
+-                                 DiskWriteHandler handler) {
+-    // Park the block so reads/hashes see it before the write reaches disk, and
+-    // count it toward the pending-write total that drives backpressure (D-2).
+-    const std::size_t sz = data.size();
++void ThreadedDiskIo::async_write_detailed(std::uint32_t piece, std::uint32_t offset, Bytes data,
++                                         std::function<void(DiskError)> handler) {
++    const auto size = data.size();
+     store_.insert(piece, offset, data);
+-    queued_bytes_.fetch_add(sz, std::memory_order_relaxed);
+-    enqueue([this, piece, offset, sz, data = std::move(data), handler = std::move(handler)]() mutable {
++    queued_bytes_.fetch_add(size, std::memory_order_relaxed);
++    enqueue([this, piece, offset, size, data = std::move(data), handler = std::move(handler)]() mutable {
++        clear_file_error();
+         const bool ok = write_range(piece, offset, data);
++        auto error = disk_error(ok);
+         store_.erase(piece, offset);
+-        queued_bytes_.fetch_sub(sz, std::memory_order_relaxed);
+-        complete([handler = std::move(handler), ok]() mutable {
+-            if (handler) handler(ok);
+-        });
++        queued_bytes_.fetch_sub(size, std::memory_order_relaxed);
++        complete([handler = std::move(handler), error]() mutable { if (handler) handler(error); });
+     });
+ }
+ 
+-void ThreadedDiskIo::async_hash(std::uint32_t piece, DiskHashHandler handler) {
++void ThreadedDiskIo::async_hash_detailed(std::uint32_t piece,
++    std::function<void(DiskError, std::array<std::uint8_t, 20>)> handler) {
+     enqueue([this, piece, handler = std::move(handler)]() mutable {
+-        const std::uint32_t ps = files_.piece_size(piece);
+-        Bytes buf;
+-        const bool ok = read_range(piece, 0, ps, buf, /*use_store=*/true, /*allow_short=*/false);
++        clear_file_error();
++        Bytes bytes;
++        const bool ok = read_range(piece, 0, files_.piece_size(piece), bytes, true, false);
++        auto error = disk_error(ok);
+         std::array<std::uint8_t, 20> digest{};
+-        if (ok) digest = SHA1::hash_raw(buf.data(), buf.size());
+-        complete([handler = std::move(handler), ok, digest]() mutable {
+-            if (handler) handler(ok, digest);
+-        });
++        if (ok) digest = SHA1::hash_raw(bytes.data(), bytes.size());
++        complete([handler = std::move(handler), error, digest]() mutable { if (handler) handler(error, digest); });
+     });
+ }
+ 
+-void ThreadedDiskIo::async_check_files(Bitfield trusted_have, DiskCheckProgress progress,
+-                                       DiskCheckHandler handler) {
+-    enqueue([this, trusted_have = std::move(trusted_have), progress = std::move(progress),
+-             handler = std::move(handler)]() mutable {
+-        const std::uint32_t n = files_.num_pieces();
+-        const bool have_trust = trusted_have.size() == n;
++void ThreadedDiskIo::async_check_files_detailed(Bitfield trusted, DiskCheckProgress progress,
++    std::function<void(DiskError, Bitfield)> handler) {
++    enqueue([this, trusted = std::move(trusted), progress = std::move(progress), handler = std::move(handler)]() mutable {
++        const auto n = files_.num_pieces();
++        const bool trust = trusted.size() == n;
+         Bitfield have(n, false);
+-
++        DiskError error;
+         for (std::uint32_t p = 0; p < n; ++p) {
+-            if (have_trust && trusted_have.get(p)) {
+-                have.set(p);  // fast resume: trust the saved bit, skip hashing
+-            } else {
+-                Bytes buf;
+-                if (read_range(p, 0, files_.piece_size(p), buf, /*use_store=*/false, /*allow_short=*/true)) {
+-                    auto digest = SHA1::hash_raw(buf.data(), buf.size());
+-                    if (std::memcmp(digest.data(), piece_hashes_.data() + std::size_t(p) * 20, 20) == 0)
+-                        have.set(p);
++            if (trust && trusted.get(p)) have.set(p);
++            else {
++                clear_file_error();
++                Bytes bytes;
++                if (read_range(p, 0, files_.piece_size(p), bytes, false, true)) {
++                    const auto digest = SHA1::hash_raw(bytes.data(), bytes.size());
++                    if (std::memcmp(digest.data(), piece_hashes_.data() + std::size_t(p) * 20, 20) == 0) have.set(p);
++                } else if (last_file_error().code) {
++                    error = disk_error(false);
++                    break;
+                 }
+             }
+-            if (progress) {
+-                const std::uint32_t done = p + 1;
+-                complete([progress, done, n] { progress(done, n); });
+-            }
++            if (progress) complete([progress, p, n] { progress(p + 1, n); });
+         }
+-        complete([handler = std::move(handler), have = std::move(have)]() mutable {
+-            if (handler) handler(std::move(have));
++        complete([handler = std::move(handler), error, have = std::move(have)]() mutable {
++            if (handler) handler(error, std::move(have));
+         });
+     });
+ }
+ 
+-} // namespace librats::bittorrent
++} // namespace librats::bittorrent
+\ No newline at end of file
+diff --git a/src/librats/bittorrent/disk_io.h b/src/librats/bittorrent/disk_io.h
+index 2da3093..0279a83 100644
+--- a/src/librats/bittorrent/disk_io.h
++++ b/src/librats/bittorrent/disk_io.h
+@@ -24,6 +24,7 @@
+ #include "librats/bittorrent/store_buffer.h"
+ #include "librats/bittorrent/torrent_info.h"
+ #include "librats/core/bytes.h"
++#include "librats/bittorrent/download_error.h"
+ 
+ #include <array>
+ #include <atomic>
+@@ -52,6 +53,33 @@ class DiskIo {
+ public:
+     virtual ~DiskIo() = default;
+ 
++    // Detailed variants preserve the legacy virtual interface and existing
++    // fakes/consumers. Native storage overrides these to retain worker errors.
++    virtual void async_write_detailed(std::uint32_t piece, std::uint32_t offset, Bytes data,
++                                      std::function<void(DiskError)> handler) {
++        async_write(piece, offset, std::move(data), [handler = std::move(handler)](bool ok) {
++            handler(ok ? DiskError{} : classify_fs_error(EIO, "write", ""));
++        });
++    }
++    virtual void async_read_detailed(std::uint32_t piece, std::uint32_t offset, std::uint32_t length,
++                                     std::function<void(DiskError, Bytes)> handler) {
++        async_read(piece, offset, length, [handler = std::move(handler)](bool ok, Bytes data) {
++            handler(ok ? DiskError{} : classify_fs_error(EIO, "read", ""), std::move(data));
++        });
++    }
++    virtual void async_hash_detailed(std::uint32_t piece,
++                                     std::function<void(DiskError, std::array<std::uint8_t, 20>)> handler) {
++        async_hash(piece, [handler = std::move(handler)](bool ok, std::array<std::uint8_t, 20> hash) {
++            handler(ok ? DiskError{} : classify_fs_error(EIO, "hash", ""), hash);
++        });
++    }
++    virtual void async_check_files_detailed(Bitfield trusted, DiskCheckProgress progress,
++                                            std::function<void(DiskError, Bitfield)> handler) {
++        async_check_files(std::move(trusted), std::move(progress), [handler = std::move(handler)](Bitfield have) {
++            handler({}, std::move(have));
++        });
++    }
++
+     /// Read @p length bytes at @p offset within @p piece.
+     virtual void async_read(std::uint32_t piece, std::uint32_t offset, std::uint32_t length,
+                             DiskReadHandler handler) = 0;
+@@ -98,6 +126,15 @@ public:
+ 
+     ~ThreadedDiskIo() override;
+ 
++    void async_write_detailed(std::uint32_t piece, std::uint32_t offset, Bytes data,
++                              std::function<void(DiskError)> handler) override;
++    void async_read_detailed(std::uint32_t piece, std::uint32_t offset, std::uint32_t length,
++                             std::function<void(DiskError, Bytes)> handler) override;
++    void async_hash_detailed(std::uint32_t piece,
++                             std::function<void(DiskError, std::array<std::uint8_t, 20>)> handler) override;
++    void async_check_files_detailed(Bitfield trusted, DiskCheckProgress progress,
++                                    std::function<void(DiskError, Bitfield)> handler) override;
++
+     ThreadedDiskIo(const ThreadedDiskIo&) = delete;
+     ThreadedDiskIo& operator=(const ThreadedDiskIo&) = delete;
+ 
+diff --git a/src/librats/bittorrent/download_error.h b/src/librats/bittorrent/download_error.h
+new file mode 100644
+index 0000000..d182500
+--- /dev/null
++++ b/src/librats/bittorrent/download_error.h
+@@ -0,0 +1,37 @@
++#pragma once
++
++#include <cerrno>
++#include <string>
++
++namespace librats::bittorrent {
++
++// Values cross the disk-worker/reactor boundary by value; never read errno on
++// the reactor to diagnose an operation performed by another thread.
++struct DiskError {
++    std::string code;
++    std::string operation;
++    std::string path;
++    int system_code = 0;
++    bool retryable = false;
++    explicit operator bool() const noexcept { return !code.empty(); }
++};
++
++inline DiskError classify_fs_error(int code, std::string operation, std::string path) {
++    DiskError error;
++    error.system_code = code ? code : EIO;
++    error.operation = std::move(operation);
++    error.path = std::move(path);
++    switch (error.system_code) {
++    case ENOSPC: error.code = "diskFull"; break;
++    case EACCES: case EPERM: error.code = "permissionDenied"; break;
++    case EINVAL: case EILSEQ: case ENAMETOOLONG: case ENOTDIR:
++        error.code = "invalidPath"; break;
++    case ENOENT: error.code = "missingData"; break;
++    case EAGAIN: case EINTR: case EBUSY:
++        error.code = "temporaryIo"; error.retryable = true; break;
++    default: error.code = "ioError"; break;
++    }
++    return error;
++}
++
++} // namespace librats::bittorrent
+diff --git a/src/librats/bittorrent/torrent.cpp b/src/librats/bittorrent/torrent.cpp
+index f92b20f..2bb513c 100644
+--- a/src/librats/bittorrent/torrent.cpp
++++ b/src/librats/bittorrent/torrent.cpp
+@@ -16,7 +16,7 @@ Torrent::Torrent(Reactor& reactor, TorrentHost& host, TorrentInfo info, std::str
+     , host_(host)
+     , info_(std::move(info))
+     , save_path_(std::move(save_path))
+-    , choker_(4) {}
++    , choker_(4) { has_metadata_ = info_.has_metadata(); }
+ 
+ Torrent::~Torrent() {
+     // Invalidate the liveness token before tearing down: stop() joins the disk /
+@@ -32,22 +32,94 @@ void Torrent::post(std::function<void()> fn) {
+     });
+ }
+ 
++void Torrent::start_metadata_only() {
++    set_content_allowed(false);
++    start();
++}
++
++bool Torrent::start_content() {
++    if (last_error_) return false; // ordinary resume must not clear an I/O fault
++    content_allowed_ = true;
++    if (!running_) start();
++    if (paused_) resume();
++    if (state_ == State::Waiting) state_ = is_complete() ? State::Seeding : State::Downloading;
++    for (auto* peer : std::vector<PeerConnection*>(peers_)) if (alive(peer) && picker_) update_interest(*peer);
++    try_connect();
++    return true;
++}
++
++void Torrent::set_content_allowed(bool allowed) {
++    content_allowed_ = allowed;
++    if (!allowed && running_ && has_metadata_ && state_ != State::Checking && !last_error_) {
++        pause(); // drops outstanding requests before returning
++        state_ = State::Waiting;
++    }
++}
++
++void Torrent::clear_error() { last_error_ = {}; io_retries_ = 0; }
++
++void Torrent::fail_io(DiskError error) {
++    if (last_error_) return;
++    last_error_ = std::move(error);
++    if (io_retry_timer_ != kInvalidTimerId) { reactor_.cancel(io_retry_timer_); io_retry_timer_ = kInvalidTimerId; }
++    pause();
++    state_ = State::Error;
++}
++
++void Torrent::schedule_io_retry(std::uint32_t piece, const DiskError& error) {
++    if (!error.retryable || io_retries_ >= 3) { fail_io(error); return; }
++    if (picker_) picker_->restore_piece(piece);
++    if (io_retry_timer_ != kInvalidTimerId) return;
++    ++io_retries_;
++    io_retry_timer_ = reactor_.schedule(std::chrono::seconds(1u << (io_retries_ - 1)),
++        [this, alive = alive_, generation = generation_] {
++            if (!alive->load(std::memory_order_acquire)) return;
++            io_retry_timer_ = kInvalidTimerId;
++            if (generation == generation_ && !last_error_ && !paused_) refill_all();
++        });
++}
++
++void Torrent::rebuild_verified_state(const Bitfield& have) {
++    verified_bytes_ = 0;
++    verified_file_bytes_.assign(info_.files().files().size(), 0);
++    for (std::uint32_t piece = 0; piece < info_.num_pieces(); ++piece) {
++        if (piece >= have.size() || !have.get(piece)) continue;
++        verified_bytes_ += info_.piece_size(piece);
++        for (const auto& slice : info_.files().map_block(piece, 0, info_.piece_size(piece)))
++            verified_file_bytes_[slice.file_index] += slice.size;
++    }
++}
++
++void Torrent::on_io_check_complete(DiskError error, Bitfield have) {
++    if (!running_ || last_error_) return;
++    if (error) { rebuild_verified_state(have); fail_io(std::move(error)); return; }
++    on_check_complete(std::move(have));
++}
++
++std::vector<std::uint64_t> Torrent::file_verified_bytes() const {
++    return verified_file_bytes_.size() == info_.files().files().size() ? verified_file_bytes_
++        : std::vector<std::uint64_t>(info_.files().files().size(), 0);
++}
++
+ void Torrent::start() {
+-    if (running_) return;
++    if (running_ || last_error_) return;
++    ++generation_;
+     running_ = true;
++    verified_bytes_ = 0;
++    verified_file_bytes_.assign(info_.files().files().size(), 0);
+     has_metadata_ = info_.has_metadata();
+ 
+     if (has_metadata_) {
+         picker_ = std::make_unique<PiecePicker>(info_.num_pieces(), info_.piece_length(), info_.total_size());
+         disk_   = std::make_unique<ThreadedDiskIo>(
+             info_, save_path_,
+-            [this](std::function<void()> fn) { post(std::move(fn)); });
++            [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
+         state_ = State::Checking;
+         LOG_INFO("bt.torrent", short_hash(info_hash()) << " \"" << info_.name() << "\" → Checking ("
+                                << info_.num_pieces() << " pieces, " << info_.total_size() << " bytes)");
+         // Pieces in resume_have_ are trusted (skip the hash); the rest are verified.
+-        disk_->async_check_files(resume_have_, nullptr,
+-                                 [this](Bitfield have) { on_check_complete(std::move(have)); });
++        disk_->async_check_files_detailed(resume_have_, nullptr,
++            [this](DiskError error, Bitfield have) { on_io_check_complete(error, std::move(have)); });
+     } else {
+         // Magnet: no metadata yet — fetch the info dict from peers (BEP 9) first.
+         state_ = State::Metadata;
+@@ -58,7 +130,7 @@ void Torrent::start() {
+     // (which also seeds the metadata fetch for magnets).
+     if (!info_.all_trackers().empty()) {
+         trackers_ = std::make_unique<TrackerAnnouncer>(
+-            info_.all_trackers(), [this](std::function<void()> fn) { post(std::move(fn)); });
++            info_.all_trackers(), [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
+         announce_trackers(TrackerEvent::Started);
+     }
+ 
+@@ -69,6 +141,8 @@ void Torrent::start() {
+ void Torrent::stop() {
+     if (!running_) return;
+     running_ = false;
++    ++generation_;
++    if (io_retry_timer_ != kInvalidTimerId) { reactor_.cancel(io_retry_timer_); io_retry_timer_ = kInvalidTimerId; }
+     paused_  = false;
+     LOG_INFO("bt.torrent", short_hash(info_hash()) << " stopped (" << peers_.size() << " peers)");
+     if (tick_timer_ != kInvalidTimerId) { reactor_.cancel(tick_timer_); tick_timer_ = kInvalidTimerId; }
+@@ -94,17 +168,18 @@ void Torrent::stop() {
+ }
+ 
+ void Torrent::on_check_complete(Bitfield have) {
+-    if (!running_) return;
++    if (!running_ || last_error_) return;
+     picker_->set_have_bitfield(have);
++    verified_bytes_ = 0;
+     // Account the bytes already on disk toward `left` via verified_bytes_ — NOT
+     // bytes_downloaded_, which is the cumulative download counter restored verbatim
+     // from resume. Folding on-disk pieces into it too would double-count a resumed
+     // torrent (and drive `left` to 0, falsely announcing us as a seed).
+-    for (std::uint32_t p = 0; p < info_.num_pieces(); ++p)
+-        if (picker_->have_piece(p)) verified_bytes_ += info_.piece_size(p);
++    rebuild_verified_state(have);
+ 
+-    if (picker_->is_finished()) { state_ = State::Seeding; completed_announced_ = true; }
+-    else                        { state_ = State::Downloading; }
++    if (!content_allowed_)      { state_ = State::Waiting; }
++    else if (picker_->is_finished()) { state_ = State::Seeding; completed_announced_ = true; }
++    else                        { state_ = content_allowed_ ? State::Downloading : State::Waiting; }
+ 
+     // A peer that connected while the check was still running was handed an EMPTY
+     // bitfield: it is sent from on_peer_connected, and the protocol pins it to the
+@@ -174,7 +249,7 @@ void Torrent::pause() {
+ }
+ 
+ void Torrent::resume() {
+-    if (!running_ || !paused_) return;
++    if (!running_ || !paused_ || last_error_) return;
+     paused_ = false;
+     LOG_INFO("bt.torrent", short_hash(info_hash()) << " resumed");
+     // Rejoin the swarm: a fresh Started announce repopulates the peer list (the DHT
+@@ -198,7 +273,7 @@ std::function<void(const std::string&, std::uint16_t)> Torrent::dht_peer_sink()
+ }
+ 
+ void Torrent::try_connect() {
+-    if (!running_ || paused_ || peers_.size() >= kMaxPeers) return;
++    if (!running_ || paused_ || last_error_ || (has_metadata_ && !content_allowed_) || peers_.size() >= kMaxPeers) return;
+     auto candidates = peer_list_.connect_candidates(kMaxPeers - peers_.size(),
+                                                     PeerList::Clock::now());
+     for (const auto& c : candidates) host_.connect_peer(*this, c);
+@@ -222,7 +297,7 @@ void Torrent::tick() {
+     // Paused: no swarm activity — skip DHT/tracker announces, dialing, choking and
+     // PEX. Keep the tick alive so resume() picks straight back up. (peers_ is empty
+     // while paused, so there is nothing to time out or choke anyway.)
+-    if (paused_) { schedule_tick(); return; }
++    if (paused_ || last_error_ || (has_metadata_ && !content_allowed_)) { schedule_tick(); return; }
+ 
+     check_request_timeouts();  // free blocks stuck on stalled peers before anything else
+ 
+@@ -270,7 +345,7 @@ void Torrent::tick() {
+ 
+ void Torrent::on_handshake(PeerConnection& pc, const InfoHash&, const PeerId&) {
+     // Reject inbound peers while paused — pause() means "no swarm activity".
+-    if (paused_) { pc.close("torrent paused"); return; }
++    if (!running_ || paused_ || last_error_) { pc.close("torrent inactive"); return; }
+     // Cap peers per torrent. Outbound dials are already gated by try_connect(), but
+     // inbound peers reach us straight through the handshake, so enforce it here too
+     // (H3) — otherwise a flood of incoming handshakes grows peers_ without bound.
+@@ -331,14 +406,14 @@ void Torrent::on_interest(PeerConnection&, bool) {
+ }
+ 
+ void Torrent::update_interest(PeerConnection& pc) {
+-    const bool want = picker_->is_interesting(pc.peer_bitfield());
++    const bool want = content_allowed_ && !last_error_ && state_ != State::Checking && picker_->is_interesting(pc.peer_bitfield());
+     if (want && !pc.am_interested())       pc.send_interested();
+     else if (!want && pc.am_interested())  pc.send_not_interested();
+     if (want && !pc.peer_choking())        refill(pc);
+ }
+ 
+ void Torrent::refill(PeerConnection& pc) {
+-    if (!running_ || !picker_ || pc.peer_choking() || !pc.am_interested()) return;
++    if (!running_ || paused_ || last_error_ || !content_allowed_ || state_ == State::Checking || io_retry_timer_ != kInvalidTimerId || !picker_ || pc.peer_choking() || !pc.am_interested()) return;
+     // Disk backpressure: while too many writes are still pending, stop requesting
+     // new blocks so the write queue can drain (D-2). on_block_written() resumes
+     // requesting once it falls back under the watermark.
+@@ -365,7 +440,7 @@ void Torrent::refill(PeerConnection& pc) {
+ }
+ 
+ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t offset, ByteView data) {
+-    if (!picker_ || piece >= info_.num_pieces()) return;
++    if (!running_ || paused_ || last_error_ || !content_allowed_ || !picker_ || piece >= info_.num_pieces()) return;
+ 
+     // Reject a malformed or unsolicited block before it can index the picker's
+     // block vector out of bounds: the offset must be block-aligned and inside the
+@@ -412,8 +487,11 @@ void Torrent::on_piece(PeerConnection& pc, std::uint32_t piece, std::uint32_t of
+         opc->send_cancel(piece, block.block * kBlockSize, picker_->block_size(piece, block.block));
+     }
+ 
+-    disk_->async_write(piece, offset, data.to_bytes(),
+-                       [this, block](bool ok) { on_block_written(block, ok); });
++    disk_->async_write_detailed(piece, offset, data.to_bytes(), [this, block](DiskError error) {
++        if (!running_ || last_error_) return;
++        if (error) { schedule_io_retry(block.piece, error); return; }
++        on_block_written(block, true);
++    });
+ 
+     refill(pc);  // keep the pipeline full while the write is in flight
+ }
+@@ -454,12 +532,8 @@ void Torrent::check_request_timeouts() {
+ 
+ void Torrent::on_block_written(PieceBlock block, bool ok) {
+     if (!running_ || !picker_) return;
+-    if (!ok) {
+-        LOG_ERROR("bt.torrent", short_hash(info_hash()) << " ✗ disk write failed for piece "
+-                                << block.piece << ", will refetch");
+-        picker_->restore_piece(block.piece);
+-        return;
+-    }
++    if (last_error_) return;
++    if (!ok) { fail_io(classify_fs_error(EIO, "write", save_path_)); return; }
+     if (picker_->mark_finished(block)) verify_piece(block.piece);
+ 
+     // A write just drained: if backpressure had paused requesting and the queue is
+@@ -471,30 +545,39 @@ void Torrent::on_block_written(PieceBlock block, bool ok) {
+ }
+ 
+ void Torrent::refill_all() {
+-    for (PeerConnection* pc : peers_)
+-        if (pc->am_interested() && !pc->peer_choking()) refill(*pc);
++    for (PeerConnection* pc : std::vector<PeerConnection*>(peers_))
++        if (alive(pc) && pc->am_interested() && !pc->peer_choking()) refill(*pc);
+ }
+ 
+ void Torrent::verify_piece(std::uint32_t piece) {
+-    disk_->async_hash(piece, [this, piece](bool ok, std::array<std::uint8_t, 20> hash) {
+-        on_piece_hashed(piece, ok, hash);
++    disk_->async_hash_detailed(piece, [this, piece](DiskError error, std::array<std::uint8_t, 20> hash) {
++        if (!running_ || last_error_) return;
++        if (error) { schedule_io_retry(piece, error); return; }
++        on_piece_hashed(piece, true, hash);
+     });
+ }
+ 
+ void Torrent::on_piece_hashed(std::uint32_t piece, bool ok, std::array<std::uint8_t, 20> hash) {
+-    if (!running_ || !picker_) return;
++    if (!running_ || last_error_ || !picker_ || picker_->have_piece(piece)) return;
+     if (!ok || hash != info_.piece_hash(piece)) {
++        ++hash_failures_;
+         LOG_WARN("bt.torrent", short_hash(info_hash()) << " ✗ piece " << piece
+                                << " hash mismatch, refetch");
+         picker_->restore_piece(piece);  // corrupt — fetch it again
++        refill_all();
+         return;
+     }
+ 
+     picker_->we_have(piece);
++    if (verified_file_bytes_.size() != info_.files().files().size())
++        verified_file_bytes_.assign(info_.files().files().size(), 0);
++    for (const auto& slice : info_.files().map_block(piece, 0, info_.piece_size(piece)))
++        verified_file_bytes_[slice.file_index] += slice.size;
+     verified_bytes_ += info_.piece_size(piece);  // one more piece is now on disk → shrinks `left`
+-    for (PeerConnection* pc : peers_) {
++    for (PeerConnection* pc : std::vector<PeerConnection*>(peers_)) {
++        if (!alive(pc)) continue;
+         pc->send_have(piece);
+-        update_interest(*pc);  // we may no longer need some peers
++        if (alive(pc)) update_interest(*pc);  // we may no longer need some peers
+     }
+ 
+     LOG_DEBUG("bt.torrent", short_hash(info_hash()) << " ✓ piece " << piece << " verified ("
+@@ -517,7 +600,7 @@ void Torrent::on_piece_hashed(std::uint32_t piece, bool ok, std::array<std::uint
+ }
+ 
+ void Torrent::on_request(PeerConnection& pc, std::uint32_t piece, std::uint32_t offset, std::uint32_t length) {
+-    if (!picker_ || pc.am_choking()) return;             // we are not serving this peer
++    if (!running_ || paused_ || last_error_ || !content_allowed_ || !picker_ || pc.am_choking()) return;             // we are not serving this peer
+     if (piece >= info_.num_pieces() || !picker_->have_piece(piece)) return;
+     if (length == 0 || length > kMaxBlockSize) return;
+     // The requested range must lie wholly within the piece, else the disk read
+@@ -526,8 +609,10 @@ void Torrent::on_request(PeerConnection& pc, std::uint32_t piece, std::uint32_t
+     if (offset >= piece_bytes || length > piece_bytes - offset) return;
+ 
+     PeerConnection* peer = &pc;
+-    disk_->async_read(piece, offset, length, [this, peer, piece, offset](bool ok, Bytes data) {
+-        if (ok && alive(peer)) {
++    disk_->async_read_detailed(piece, offset, length, [this, peer, piece, offset](DiskError error, Bytes data) {
++        if (!running_ || last_error_) return;
++        if (error) { fail_io(error); return; }
++        if (!paused_ && content_allowed_ && alive(peer)) {
+             const std::size_t sent = data.size();  // data is about to be moved away
+             peer->send_piece(piece, offset, std::move(data));
+             bytes_uploaded_    += sent;
+@@ -632,8 +717,8 @@ std::size_t Torrent::num_outstanding_requests() const noexcept {
+ }
+ 
+ double Torrent::progress() const {
+-    if (!picker_ || info_.num_pieces() == 0) return 0.0;
+-    return double(picker_->num_have()) / double(info_.num_pieces());
++    if (!picker_ || info_.total_size() == 0) return 0.0;
++    return double(verified_bytes_) / double(info_.total_size());
+ }
+ 
+ // ---- extension protocol / metadata (BEP 10 / BEP 9) ----
+@@ -746,16 +831,16 @@ void Torrent::try_complete_metadata() {
+ void Torrent::promote_to_downloading() {
+     picker_ = std::make_unique<PiecePicker>(info_.num_pieces(), info_.piece_length(), info_.total_size());
+     disk_   = std::make_unique<ThreadedDiskIo>(
+-        info_, save_path_, [this](std::function<void()> fn) { post(std::move(fn)); });
+-    state_ = State::Downloading;
++        info_, save_path_, [this, generation = generation_](std::function<void()> fn) { post([this, generation, fn = std::move(fn)]() mutable { if (generation == generation_) fn(); }); });
++    state_ = State::Checking;
+ 
+     // Adopt the bitfields we received while metadata-less and (re)evaluate interest.
+     for (PeerConnection* pc : peers_) {
+         picker_->inc_availability(pc->peer_bitfield());
+         update_interest(*pc);
+     }
+-    disk_->async_check_files(Bitfield{}, nullptr,
+-                             [this](Bitfield have) { on_check_complete(std::move(have)); });
++    disk_->async_check_files_detailed(Bitfield{}, nullptr,
++        [this](DiskError error, Bitfield have) { on_io_check_complete(error, std::move(have)); });
+ }
+ 
+ // ---- peer exchange (BEP 11) ----
+@@ -864,6 +949,7 @@ void Torrent::load_resume_data(const ResumeData& rd) {
+     if (running_) return;  // must be applied before start()
+     // Recover metadata for a magnet torrent from the embedded info section.
+     if (!info_.has_metadata() && !rd.info_dict.empty()) info_.set_metadata(rd.info_dict);
++    has_metadata_ = info_.has_metadata();
+     if (!is_all_zero(rd.info_hash) && rd.info_hash != info_hash()) return;  // not ours
+     resume_have_     = rd.have;
+     bytes_uploaded_  = rd.total_uploaded;
+diff --git a/src/librats/bittorrent/torrent.h b/src/librats/bittorrent/torrent.h
+index 8356526..1a88d7f 100644
+--- a/src/librats/bittorrent/torrent.h
++++ b/src/librats/bittorrent/torrent.h
+@@ -74,7 +74,7 @@ public:
+ 
+ class RATS_API Torrent final : public PeerConnection::Observer {
+ public:
+-    enum class State { Stopped, Metadata, Checking, Downloading, Seeding };
++    enum class State { Stopped, Metadata, Checking, Downloading, Seeding, Waiting, Error };
+ 
+     Torrent(Reactor& reactor, TorrentHost& host, TorrentInfo info, std::string save_path);
+     ~Torrent() override;
+@@ -84,6 +84,17 @@ public:
+ 
+     void start();
+     void stop();
++    void start_metadata_only();
++    bool start_content();
++    void set_content_allowed(bool allowed);
++    bool content_allowed() const noexcept { return content_allowed_; }
++    void verify_resume_on_start() { resume_have_ = {}; }
++    const DiskError& last_error() const noexcept { return last_error_; }
++    std::uint64_t verified_bytes() const noexcept { return verified_bytes_; }
++    std::uint64_t hash_failures() const noexcept { return hash_failures_; }
++    std::vector<std::uint64_t> file_verified_bytes() const;
++    void fail_io(DiskError error);
++    std::weak_ptr<std::atomic<bool>> lifetime_token() const { return alive_; }
+ 
+     /// Pause a running torrent: drop its peers and stop dialing/serving, but keep
+     /// the piece picker and disk state so resume() does not re-hash. No-op if not
+@@ -150,6 +161,17 @@ public:
+     void on_closed(PeerConnection&, const std::string& reason) override;
+ 
+ private:
++    void clear_error();
++    void rebuild_verified_state(const Bitfield& have);
++    void on_io_check_complete(DiskError error, Bitfield have);
++    void schedule_io_retry(std::uint32_t piece, const DiskError& error);
++    bool content_allowed_ = true;
++    DiskError last_error_;
++    unsigned io_retries_ = 0;
++    std::uint64_t hash_failures_ = 0;
++    std::uint64_t generation_ = 0;
++    std::vector<std::uint64_t> verified_file_bytes_;
++    TimerId io_retry_timer_ = kInvalidTimerId;
+     /// Set while pause() is tearing down its peers, so on_closed can tell "we let
+     /// this peer go" from "this peer failed on us" and skip the reconnect penalty.
+     bool releasing_peers_ = false;
+diff --git a/src/librats/subsystems/bittorrent.cpp b/src/librats/subsystems/bittorrent.cpp
+index 37ed1fa..00a9fb2 100644
+--- a/src/librats/subsystems/bittorrent.cpp
++++ b/src/librats/subsystems/bittorrent.cpp
+@@ -149,6 +149,8 @@ void Bittorrent::fetch_metadata_impl(const std::string& info_hash_hex, const std
+     struct State {
+         bool                    done = false;
+         bool                    success = false;
++        std::string reason = "metadata timeout";
++        std::weak_ptr<std::atomic<bool>> owned_torrent;
+         bittorrent::TorrentInfo info;
+     };
+     auto state = std::make_shared<State>();
+@@ -165,13 +167,35 @@ void Bittorrent::fetch_metadata_impl(const std::string& info_hash_hex, const std
+     // All Client mutations happen on its reactor thread.
+     const std::string magnet = "magnet:?xt=urn:btih:" + info_hash_hex;
+     client_->reactor().post([this, magnet, ip, port, direct, state] {
+-        bittorrent::Torrent* t = client_->add_magnet(magnet);
++        {
++            std::lock_guard<std::mutex> lk(meta_mutex_);
++            if (state->done || meta_stopping_) return;
++        }
++        const auto hash = bittorrent::TorrentInfo::from_magnet(magnet)->info_hash();
++        if (auto* existing = client_->get_torrent(hash)) {
++            // Never take over a user download's callback, gate or ownership.
++            std::lock_guard<std::mutex> lk(meta_mutex_);
++            if (existing->has_metadata()) { state->info = existing->torrent_info(); state->success = true; }
++            else state->reason = "metadata already in progress";
++            state->done = true;
++            meta_cv_.notify_all();
++            return;
++        }
++        bittorrent::CreateOptions options;
++        options.mode = bittorrent::StartMode::MetadataOnly;
++        const auto created = client_->create_magnet(magnet, "", options);
++        bittorrent::Torrent* t = created.applied ? client_->get_torrent(created.hash) : nullptr;
+         if (!t) {
+             std::lock_guard<std::mutex> lk(meta_mutex_);
+             state->done = true;
+             meta_cv_.notify_all();
+             return;
+         }
++        {
++            std::lock_guard<std::mutex> lk(meta_mutex_);
++            if (state->done || meta_stopping_) { client_->remove_torrent(hash); return; }
++            state->owned_torrent = t->lifetime_token();
++        }
+         t->set_metadata_callback([this, state](const bittorrent::TorrentInfo& info) {
+             std::lock_guard<std::mutex> lk(meta_mutex_);
+             if (state->done) return;
+@@ -186,6 +210,8 @@ void Bittorrent::fetch_metadata_impl(const std::string& info_hash_hex, const std
+     std::thread([this, ih = *ih, callback = std::move(callback), timeout_ms, state] {
+         bool                    success = false;
+         bittorrent::TorrentInfo info;
++        std::weak_ptr<std::atomic<bool>> owned;
++        std::string reason;
+         {
+             std::unique_lock<std::mutex> wl(meta_mutex_);
+             meta_cv_.wait_for(wl, std::chrono::milliseconds(timeout_ms),
+@@ -193,14 +219,19 @@ void Bittorrent::fetch_metadata_impl(const std::string& info_hash_hex, const std
+             state->done = true;  // block any late metadata callback
+             success = state->success;
+             info    = state->info;
++            owned = state->owned_torrent;
++            reason = state->reason;
+         }
+ 
+         // Drop the temporary torrent on the reactor thread. client_ is alive:
+         // stop() waits on meta_drain_cv_ until meta_inflight_ hits 0.
+-        if (client_) client_->reactor().post([this, ih] { client_->remove_torrent(ih); });
++        if (client_) client_->reactor().post([this, ih, owned] {
++            const auto token = owned.lock();
++            if (token && token->load(std::memory_order_acquire)) client_->remove_torrent(ih);
++        });
+ 
+         if (callback)
+-            callback(info, success, success ? std::string() : std::string("metadata timeout"));
++            callback(info, success, success ? std::string() : reason);
+ 
+         std::lock_guard<std::mutex> dl(meta_mutex_);
+         --meta_inflight_;
+diff --git a/src/librats/util/fs.cpp b/src/librats/util/fs.cpp
+index eb0a298..6248107 100644
+--- a/src/librats/util/fs.cpp
++++ b/src/librats/util/fs.cpp
+@@ -3,6 +3,7 @@
+ #include <cstring>
+ #include <cstdlib>
+ #include <cwchar>
++#include <cerrno>
+ #include <sys/stat.h>
+ 
+ #ifdef _WIN32
+@@ -24,12 +25,16 @@
+ namespace librats {
+ 
+ namespace {
++thread_local FileError file_error;
++void capture_fs_error(const char* operation, const char* path) {
++    file_error = {errno ? errno : EIO, operation, path ? path : ""};
++}
+ #ifdef _WIN32
+ // Reject invalid UTF-8 instead of silently creating a different filename.
+ std::wstring wide_path(const char* path) {
+-    if (!path) return {};
++    if (!path || !*path) { errno = EINVAL; return {}; }
+     const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, nullptr, 0);
+-    if (size <= 0) return {};
++    if (size <= 0) { errno = EILSEQ; return {}; }
+     std::wstring result(static_cast<size_t>(size), L'\0');
+     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, result.data(), size)) return {};
+     result.pop_back();
+@@ -38,21 +43,36 @@ std::wstring wide_path(const char* path) {
+ using PathStat = struct _stat64;
+ int path_stat(const char* path, PathStat* st) {
+     const auto wide = wide_path(path);
+-    return wide.empty() ? -1 : _wstat64(wide.c_str(), st);
++    const int result = wide.empty() ? -1 : _wstat64(wide.c_str(), st);
++    if (result != 0) capture_fs_error("stat", path);
++    return result;
+ }
+ FILE* path_fopen(const char* path, const char* mode) {
+     const auto wide = wide_path(path);
+-    if (wide.empty()) return nullptr;
++    if (wide.empty()) { capture_fs_error("open", path); return nullptr; }
+     const std::wstring wide_mode(mode, mode + strlen(mode));
+-    return _wfopen(wide.c_str(), wide_mode.c_str());
++    FILE* file = _wfopen(wide.c_str(), wide_mode.c_str());
++    if (!file) capture_fs_error("open", path);
++    return file;
+ }
+ #else
+ using PathStat = struct stat;
+-int path_stat(const char* path, PathStat* st) { return stat(path, st); }
+-FILE* path_fopen(const char* path, const char* mode) { return fopen(path, mode); }
++int path_stat(const char* path, PathStat* st) {
++    const int result = stat(path, st);
++    if (result != 0) capture_fs_error("stat", path);
++    return result;
++}
++FILE* path_fopen(const char* path, const char* mode) {
++    FILE* file = fopen(path, mode);
++    if (!file) capture_fs_error("open", path);
++    return file;
++}
+ #endif
+ } // namespace
+ 
++FileError last_file_error() { return file_error; }
++void clear_file_error() { file_error = {}; errno = 0; }
++
+ 
+ bool file_or_directory_exists(const char* path) {
+     if (!path) return false;
+@@ -238,9 +258,13 @@ bool create_directory(const char* path) {
+     
+ #ifdef _WIN32
+     const auto wide = wide_path(path);
+-    return !wide.empty() && _wmkdir(wide.c_str()) == 0;
++    const bool ok = !wide.empty() && _wmkdir(wide.c_str()) == 0;
++    if (!ok) capture_fs_error("mkdir", path);
++    return ok;
+ #else
+-    return mkdir(path, 0755) == 0;
++    const bool ok = mkdir(path, 0755) == 0;
++    if (!ok) capture_fs_error("mkdir", path);
++    return ok;
+ #endif
+ }
+ 
+@@ -508,13 +532,16 @@ bool write_file_chunk(const char* path, uint64_t offset, const void* data, size_
+ #else
+     if (fseeko(file, static_cast<off_t>(offset), SEEK_SET) != 0) {
+ #endif
++        capture_fs_error("seek", path);
+         LOG_ERROR("FS", "Failed to seek to offset " << offset << " in file: " << path);
+         fclose(file);
+         return false;
+     }
+     
+     size_t written = fwrite(data, 1, size, file);
+-    fclose(file);
++    if (written != size) capture_fs_error("write", path);
++    const int close_result = fclose(file);
++    if (close_result != 0) { capture_fs_error("close", path); return false; }
+     
+     if (written != size) {
+         LOG_ERROR("FS", "Failed to write complete chunk to file: " << path);
+@@ -539,12 +566,14 @@ bool read_file_chunk(const char* path, uint64_t offset, void* buffer, size_t siz
+ #else
+     if (fseeko(file, static_cast<off_t>(offset), SEEK_SET) != 0) {
+ #endif
++        capture_fs_error("seek", path);
+         LOG_ERROR("FS", "Failed to seek to offset " << offset << " in file: " << path);
+         fclose(file);
+         return false;
+     }
+     
+     size_t bytes_read = fread(buffer, 1, size, file);
++    if (bytes_read != size) { if (!ferror(file)) errno = EIO; capture_fs_error("read", path); }
+     fclose(file);
+     
+     if (bytes_read != size) {
+@@ -558,31 +587,21 @@ bool read_file_chunk(const char* path, uint64_t offset, void* buffer, size_t siz
+ // Advanced file operations
+ bool create_file_with_size(const char* path, uint64_t size) {
+     if (!path) return false;
+-    
+     FILE* file = path_fopen(path, "wb");
+-    if (!file) {
+-        LOG_ERROR("FS", "Failed to create file with size: " << path);
+-        return false;
+-    }
+-    
++    if (!file) return false;
++    bool ok = true;
+     if (size > 0) {
+-        // Pre-allocate file space by seeking to size-1 and writing a byte
+-        // Use platform-specific 64-bit seek
+ #ifdef _WIN32
+-        if (_fseeki64(file, static_cast<__int64>(size - 1), SEEK_SET) == 0) {
++        ok = _fseeki64(file, static_cast<__int64>(size - 1), SEEK_SET) == 0;
+ #else
+-        if (fseeko(file, static_cast<off_t>(size - 1), SEEK_SET) == 0) {
++        ok = fseeko(file, static_cast<off_t>(size - 1), SEEK_SET) == 0;
+ #endif
+-            fputc(0, file);
+-        }
++        if (!ok) capture_fs_error("seek", path);
++        else if (fputc(0, file) == EOF) { capture_fs_error("write", path); ok = false; }
+     }
+-    
+-    fclose(file);
+-    return true;
++    if (fclose(file) != 0) { capture_fs_error("close", path); ok = false; }
++    return ok;
+ }
+-
+-// ── FileStream: one open handle across many positioned operations ──────────────
+-
+ static bool fs_seek64(FILE* f, uint64_t offset) {
+ #ifdef _WIN32
+     return _fseeki64(f, static_cast<__int64>(offset), SEEK_SET) == 0;
+diff --git a/src/librats/util/fs.h b/src/librats/util/fs.h
+index 0afa1f9..6d75310 100644
+--- a/src/librats/util/fs.h
++++ b/src/librats/util/fs.h
+@@ -8,6 +8,15 @@
+ 
+ namespace librats {
+ 
++struct FileError {
++    int code = 0;
++    std::string operation;
++    std::string path;
++};
++// Thread-local failure captured at the failing CRT call, before logging/close.
++RATS_API FileError last_file_error();
++RATS_API void clear_file_error();
++
+ // Filesystem paths and returned directory names are UTF-8 on every platform.
+ // Windows implementations convert to UTF-16 at the native API boundary.
+ 

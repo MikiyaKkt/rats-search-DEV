@@ -7,6 +7,35 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 # Enable Qt testing
 enable_testing()
 
+# Optional engine regression suite reuses the exact library linked by the app.
+# No implicit network downloads: the one-click script provisions a pinned source.
+option(RATS_SEARCH_BUILD_ENGINE_TESTS "Build focused librats regression tests" OFF)
+set(RATS_SEARCH_GTEST_SOURCE_DIR "" CACHE PATH "GoogleTest v1.17.0 source directory")
+if(RATS_SEARCH_BUILD_ENGINE_TESTS)
+    if(NOT EXISTS "${RATS_SEARCH_GTEST_SOURCE_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "Set RATS_SEARCH_GTEST_SOURCE_DIR to GoogleTest v1.17.0 sources")
+    endif()
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    add_subdirectory("${RATS_SEARCH_GTEST_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/googletest" EXCLUDE_FROM_ALL)
+    set(ENGINE_TEST_DIR "${CMAKE_SOURCE_DIR}/src/librats/tests")
+    add_executable(test_download_engine
+        ${ENGINE_TEST_DIR}/test_fs.cpp
+        ${ENGINE_TEST_DIR}/test_bt_disk_io.cpp
+        ${ENGINE_TEST_DIR}/test_bt_download.cpp
+        ${ENGINE_TEST_DIR}/test_bt_pause_resume.cpp
+        ${ENGINE_TEST_DIR}/test_bt_resume_data.cpp
+        ${ENGINE_TEST_DIR}/test_bt_piece_picker.cpp
+        ${ENGINE_TEST_DIR}/test_bt_stall_metadata.cpp
+        ${ENGINE_TEST_DIR}/test_bt_store_buffer.cpp
+        ${ENGINE_TEST_DIR}/test_bt_magnet_fetch.cpp
+        ${ENGINE_TEST_DIR}/test_bt_subsystem.cpp
+        ${ENGINE_TEST_DIR}/test_bt_utp_wire.cpp
+        ${ENGINE_TEST_DIR}/test_bt_mse_wire.cpp)
+    target_link_libraries(test_download_engine PRIVATE rats GTest::gtest_main)
+    add_test(NAME test_download_engine COMMAND test_download_engine)
+    set_tests_properties(test_download_engine PROPERTIES TIMEOUT 180)
+endif()
+
 # Helper function to add a test with minimal boilerplate.
 #
 # Tests link directly against ratscore (the new layered core library defined in
@@ -31,6 +60,26 @@ endfunction()
 add_rats_test(test_domain)
 add_rats_test(test_query)
 add_rats_test(test_infohash)
+add_rats_test(test_utf8_download_paths)
+add_rats_test(test_download_metrics)
+add_rats_test(test_download_policy)
+add_rats_test(test_download_s1)
+add_rats_test(test_download_s3)
+add_rats_test(test_download_ui
+    ${CMAKE_SOURCE_DIR}/src/ui/taskdownloaddialog.cpp
+    ${CMAKE_SOURCE_DIR}/src/ui/downloadadvancedwidgets.cpp)
+target_link_libraries(test_download_ui PRIVATE Qt6::Widgets)
+target_compile_definitions(test_download_ui PRIVATE RATS_SOURCE_DIR="${CMAKE_SOURCE_DIR}" RATS_BINARY_DIR="${CMAKE_BINARY_DIR}")
+add_custom_target(download_test_translations DEPENDS ${QM_FILES})
+add_dependencies(test_download_ui download_test_translations)
+set_tests_properties(test_download_ui PROPERTIES ENVIRONMENT "QT_ASSUME_STDERR_HAS_CONSOLE=1;QT_QPA_PLATFORM=offscreen")
+if(WIN32)
+    add_executable(download_package_smoke download_package_smoke.cpp)
+    target_link_libraries(download_package_smoke PRIVATE Qt6::Test ratscore)
+endif()
+set_tests_properties(test_download_s1 PROPERTIES TIMEOUT 240)
+add_rats_test(test_download_creation)
+add_rats_test(test_download_errors)
 add_rats_test(test_row_id)
 add_rats_test(test_update_service)
 add_rats_test(test_config_store)
@@ -118,7 +167,7 @@ endif()
 # Custom target to run all tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_domain test_query test_infohash test_update_service
+    DEPENDS test_domain test_query test_infohash test_utf8_download_paths test_download_metrics test_download_policy test_download_s1 test_download_s3 test_download_ui test_download_creation test_download_errors test_update_service
             test_config_store test_filter_policy test_content_classifier test_manticore_queries
             test_manticore_maintenance
             test_database_dump
@@ -131,6 +180,9 @@ add_custom_target(check
 message(STATUS "")
 message(STATUS "=== Rats Search Tests ===")
 message(STATUS "Tests enabled: ON")
+if(TARGET test_download_engine)
+    add_dependencies(check test_download_engine)
+endif()
 message(STATUS "Qt6 Test version: ${Qt6Test_VERSION}")
 message(STATUS "=========================")
 message(STATUS "")

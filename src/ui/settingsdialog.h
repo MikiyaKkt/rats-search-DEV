@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDoubleSpinBox>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
@@ -13,6 +14,8 @@
 #include <QSpinBox>
 #include <QTabWidget>
 
+class DownloadScheduleWidget;
+class SeedingPolicyWidget;
 namespace rats::app {
 class Application;
 }
@@ -57,6 +60,7 @@ private:
     QWidget* createIndexerTab();
     QWidget* createFiltersTab();
     QWidget* createStorageTab();
+    QWidget* createDownloadsTab();
     QWidget* wrapInScrollArea(QWidget* content);
     void installScrollGuard(QWidget* container);
     void loadSettings();
@@ -138,6 +142,13 @@ private:
 
     // Downloads
     QLineEdit* downloadPathEdit_;
+    QDoubleSpinBox* downloadLimit_;
+    QDoubleSpinBox* uploadLimit_;
+    QSpinBox *downloadSlots_, *seedSlots_, *metadataSlots_, *checkingSlots_, *btConnections_, *taskConnections_;
+    qint64 downloadPolicyRevision_ = 0;
+    DownloadScheduleWidget* schedule_;
+    SeedingPolicyWidget* seeding_;
+    QDoubleSpinBox* cacheMiB_;
 
     // Logging
     QSpinBox* logMaxSizeSpin_;

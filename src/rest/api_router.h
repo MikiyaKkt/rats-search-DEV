@@ -40,6 +40,7 @@ signals:
 
 private:
     void registerMethods();
+    void registerDownloadMethods();
     // Re-broadcast service-layer signals (download progress, votes, feed, config,
     // remote search hits, …) to all WebSocket clients as push events, preserving
     // the master event names/shapes so existing API clients keep working.

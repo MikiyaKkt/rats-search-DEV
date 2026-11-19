@@ -2,6 +2,7 @@
 #define RATS_APP_CONFIG_STORE_H
 
 #include "services/filter_policy.h"
+#include "services/download_policy.h"
 
 #include <QJsonObject>
 #include <QObject>
@@ -172,6 +173,8 @@ public:
 
     QString downloadPath() const;
     void setDownloadPath(const QString& path);
+    service::GlobalDownloadPolicy downloadPolicy() const;
+    bool setDownloadPolicy(const service::GlobalDownloadPolicy& policy);
 
     // =========================================================================
     // UI Settings
@@ -292,6 +295,7 @@ private:
     QString configPath_;
     QJsonObject config_;
     bool dirty_ = false;
+    bool writable_ = true; // refuse automatic overwrite after a failed load
 };
 
 } // namespace app

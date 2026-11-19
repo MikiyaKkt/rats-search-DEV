@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="ja_JP">
 <context>
@@ -2489,5 +2489,89 @@ Do you want to install the update now?</source>
         <source>Updates not supported on this platform</source>
         <translation>このプラットフォームでは更新はサポートされていません</translation>
     </message>
+</context>
+<context><name>DownloadScheduleWidget</name>
+<message><source>Add interval</source><translation>時間帯を追加</translation></message>
+<message><source>Days</source><translation>曜日</translation></message>
+<message><source>Download KiB/s</source><translation>ダウンロード KiB/s</translation></message>
+<message><source>Enable weekly bandwidth schedule</source><translation>週間帯域スケジュールを有効化</translation></message>
+<message><source>Fri</source><translation>金</translation></message>
+<message><source>From</source><translation>開始</translation></message>
+<message><source>IANA time zone, e.g. Asia/Tokyo</source><translation>IANA タイムゾーン（例：Asia/Tokyo）</translation></message>
+<message><source>Intervals use local wall time and may cross midnight. End 00:00 means midnight. Overlaps are rejected. Zero adds no rate cap; global and task caps still apply. DST repeated minutes use the same rule.</source><translation>時間帯は指定タイムゾーンの現地時刻で、日付をまたげます。終了 00:00 は深夜です。重複は不可です。速度 0 は追加制限なしですが全体・タスクの上限は有効です。夏時間で重複する時刻にも同じ規則を適用します。</translation></message>
+<message><source>Mon</source><translation>月</translation></message>
+<message><source>Pause content</source><translation>コンテンツ転送を一時停止</translation></message>
+<message><source>Remove interval</source><translation>時間帯を削除</translation></message>
+<message><source>Sat</source><translation>土</translation></message>
+<message><source>Sun</source><translation>日</translation></message>
+<message><source>Thu</source><translation>木</translation></message>
+<message><source>Time zone</source><translation>タイムゾーン</translation></message>
+<message><source>Tue</source><translation>火</translation></message>
+<message><source>Until</source><translation>終了</translation></message>
+<message><source>Upload KiB/s</source><translation>アップロード KiB/s</translation></message>
+<message><source>Wed</source><translation>水</translation></message>
+</context>
+<context><name>PieceMapWidget</name>
+<message><source>Green: verified; blue: active; gray: wanted; dark: skipped. Each cell may aggregate multiple pieces.</source><translation>緑：検証済み、青：転送中、灰：対象、暗色：除外。各セルは複数ピースをまとめる場合があります。</translation></message>
+<message><source>Piece map</source><translation>ピースマップ</translation></message>
+<message><source>Piece map is available after metadata and storage startup</source><translation>メタデータとストレージの準備後に表示されます</translation></message>
+</context>
+<context><name>SeedingPolicyWidget</name>
+<message><source> s</source><translation> 秒</translation></message>
+<message><source>Active seeding time</source><translation>シード稼働時間</translation></message>
+<message><source>Inherit global seeding conditions</source><translation>全体のシード条件を継承</translation></message>
+<message><source>Share ratio</source><translation>共有比率</translation></message>
+<message><source>Stop when all enabled conditions are reached</source><translation>有効な全条件で停止</translation></message>
+<message><source>Stop when any condition is reached</source><translation>いずれかの条件で停止</translation></message>
+<message><source>Unlimited</source><translation>無制限</translation></message>
+</context>
+<context><name>SettingsDialog</name>
+<message><source>Active downloads</source><translation>同時ダウンロード数</translation></message>
+<message><source>Active seeds</source><translation>同時シード数</translation></message>
+<message><source>BT connections per task</source><translation>タスクあたり BT 接続数</translation></message>
+<message><source>BT connections total</source><translation>BT 総接続数</translation></message>
+<message><source>Default seeding conditions</source><translation>既定のシード条件</translation></message>
+<message><source>Disabled</source><translation>無効</translation></message>
+<message><source>Download settings</source><translation>ダウンロード設定</translation></message>
+<message><source>File checks</source><translation>同時ファイル検証数</translation></message>
+<message><source>Global download limit</source><translation>全体のダウンロード速度制限</translation></message>
+<message><source>Global upload limit</source><translation>全体のアップロード速度制限</translation></message>
+<message><source>Limits apply to BitTorrent content over TCP and uTP. Protocol and metadata traffic use a separate 64 KiB/s budget. Cache is opt-in; seeding conditions never delete files.</source><translation>速度制限は TCP/uTP の BitTorrent コンテンツに適用されます。プロトコルとメタデータには独立した 64 KiB/s 枠を使います。キャッシュは任意です。シード条件でファイルは削除されません。</translation></message>
+<message><source>Metadata tasks</source><translation>メタデータ取得タスク数</translation></message>
+<message><source>Shared read cache</source><translation>共有読み取りキャッシュ</translation></message>
+<message><source>Unlimited</source><translation>無制限</translation></message>
+</context>
+<context><name>TaskDownloadDialog</name>
+<message><source>-1 inherits; 0 removes the task cap. Global caps always apply. Confirm files before downloading content. Skipped boundary data is kept in .parts for piece verification.</source><translation>-1 は全体設定を継承、0 はタスク制限なしです。全体の上限は常に適用されます。ダウンロード前にファイル選択を確定してください。検証用の境界データは .parts に保存されます。</translation></message>
+<message><source>Automatic maximum</source><translation>自動調整の最大値</translation></message>
+<message><source>Automatic minimum</source><translation>自動調整の最小値</translation></message>
+<message><source>Automatically adapt request window</source><translation>要求ウィンドウを自動調整</translation></message>
+<message><source>BT connections</source><translation>BT 接続数</translation></message>
+<message><source>Confirm file selection</source><translation>ファイル選択を確定</translation></message>
+<message><source>Download limit</source><translation>ダウンロード速度制限</translation></message>
+<message><source>Download strategy</source><translation>ダウンロード方式</translation></message>
+<message><source>File</source><translation>ファイル</translation></message>
+<message><source>File selection</source><translation>ファイル選択</translation></message>
+<message><source>Filter files by name or extension</source><translation>名前や拡張子で絞り込み</translation></message>
+<message><source>High</source><translation>高</translation></message>
+<message><source>Inherit</source><translation>全体設定を継承</translation></message>
+<message><source>Low</source><translation>低</translation></message>
+<message><source>Manual requests per peer</source><translation>手動設定時のピアあたり要求数</translation></message>
+<message><source>Normal</source><translation>通常</translation></message>
+<message><source>Priority</source><translation>優先度</translation></message>
+<message><source>Queue priority</source><translation>キューの優先度</translation></message>
+<message><source>Rarest first</source><translation>希少ピース優先</translation></message>
+<message><source>Recheck</source><translation>再検証</translation></message>
+<message><source>Recheck / retry files</source><translation>ファイルを再検証・再試行</translation></message>
+<message><source>Restart seeding after goal</source><translation>目標到達後にシードを再開</translation></message>
+<message><source>Seeding conditions</source><translation>シード停止条件</translation></message>
+<message><source>Select matching files</source><translation>一致するファイルを選択</translation></message>
+<message><source>Selected file first/last pieces</source><translation>選択ファイルの先頭・末尾を優先</translation></message>
+<message><source>Sequential</source><translation>順次ダウンロード</translation></message>
+<message><source>Skip matching files</source><translation>一致するファイルを除外</translation></message>
+<message><source>Task download settings</source><translation>タスクのダウンロード設定</translation></message>
+<message><source>Task settings</source><translation>タスク設定</translation></message>
+<message><source>Upload limit</source><translation>アップロード速度制限</translation></message>
+<message><source>Verified</source><translation>検証済み</translation></message>
 </context>
 </TS>

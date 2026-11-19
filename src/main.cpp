@@ -127,6 +127,7 @@ static void addCommonOptions(QCommandLineParser& parser, QCommandLineOption& por
     parser.addOption(port);
     parser.addOption(dhtPort);
     parser.addOption(dataDir);
+    parser.addOption(QCommandLineOption("no-remember-data-dir",QStringLiteral("Do not remember the explicit data directory (isolated/portable runs)")));
     parser.addOption(maxPeers);
     parser.addOption(spider);
     parser.addOption(shareDb);
@@ -137,7 +138,7 @@ static QString resolveDataDirectory(QCommandLineParser& parser, const QCommandLi
     QString dataDir;
     if (parser.isSet(dataDirOption)) {
         dataDir = parser.value(dataDirOption);
-        saveDataDirectory(dataDir); // remember an explicit override for next launch
+        if(!parser.isSet("no-remember-data-dir"))saveDataDirectory(dataDir);
     } else {
         dataDir = getSavedDataDirectory();
         if (dataDir.isEmpty())

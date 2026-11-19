@@ -1,4 +1,5 @@
 #include "net/torrent_engine.h"
+#include <QJsonArray>
 
 #include "net/p2p_transport.h"
 
@@ -29,6 +30,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <optional>
+#include <system_error>
 
 namespace rats::net {
 
@@ -168,6 +170,83 @@ bool TorrentEngine::addMagnet(const QString& hash, const QString& savePath)
 #endif
 }
 
+OperationResult TorrentEngine::createDownload(const QString& source, const QString& savePath, CreateOptions options)
+{
+    OperationResult result;
+#ifdef RATS_SEARCH_FEATURES
+    auto* c = client();
+    if (!c) { result.error.code = QStringLiteral("notReady"); return result; }
+    bt::CreateOptions native;
+    native.mode = options.mode == StartMode::Inactive ? bt::StartMode::Inactive
+        : options.mode == StartMode::MetadataOnly ? bt::StartMode::MetadataOnly : bt::StartMode::Automatic;
+    native.load_resume = options.loadResume;
+    native.verify_existing = options.verifyExisting;
+    bt::CreateResult created;
+    if (options.torrentFile) {
+        const auto info = bt::TorrentInfo::from_file(source.toStdString());
+        if (!info) { result.error.code = QStringLiteral("invalidMetadata"); return result; }
+        created = c->create_torrent(*info, savePath.toStdString(), native);
+    } else {
+        const auto hash = parseInfoHash(source);
+        if (hash.isEmpty()) { result.error.code = QStringLiteral("invalidHash"); return result; }
+        created = c->create_magnet("magnet:?xt=urn:btih:" + hash.toStdString(), savePath.toStdString(), native);
+    }
+    result.hash = QString::fromStdString(bt::to_hex(created.hash));
+    result.outcome = created.applied ? OperationResult::Outcome::Applied : OperationResult::Outcome::Rejected;
+    result.error.code = QString::fromStdString(created.error_code);
+#else
+    Q_UNUSED(source); Q_UNUSED(savePath); Q_UNUSED(options);
+    result.error.code = QStringLiteral("notSupported");
+#endif
+    return result;
+}
+
+bool TorrentEngine::startMetadata(const QString& hash)
+{
+#ifdef RATS_SEARCH_FEATURES
+    const auto ih = toInfoHash(hash);
+    return client() && ih && client()->start_metadata(*ih);
+#else
+    Q_UNUSED(hash); return false;
+#endif
+}
+
+bool TorrentEngine::startContent(const QString& hash)
+{
+#ifdef RATS_SEARCH_FEATURES
+    const auto ih = toInfoHash(hash);
+    return client() && ih && client()->start_content(*ih);
+#else
+    Q_UNUSED(hash); return false;
+#endif
+}
+
+bool TorrentEngine::setGlobalPolicy(qint64 down, qint64 up, int peers, int taskPeers, int checking)
+{
+#ifdef RATS_SEARCH_FEATURES
+    auto* c=client(); if(!c) return false;
+    c->set_global_policy({std::uint64_t(down),std::uint64_t(up)},peers,taskPeers,checking); return true;
+#else
+    Q_UNUSED(down); Q_UNUSED(up); Q_UNUSED(peers); Q_UNUSED(taskPeers); Q_UNUSED(checking); return false;
+#endif
+}
+bool TorrentEngine::setTaskPolicy(const QString& hash,qint64 down,qint64 up,int peers)
+{
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash); return client() && ih && client()->set_task_policy(*ih,{std::uint64_t(down),std::uint64_t(up)},peers);
+#else
+    Q_UNUSED(hash); Q_UNUSED(down); Q_UNUSED(up); Q_UNUSED(peers); return false;
+#endif
+}
+bool TorrentEngine::allowContent(const QString& hash,bool allowed)
+{
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash); return client() && ih && client()->allow_content(*ih,allowed);
+#else
+    Q_UNUSED(hash); Q_UNUSED(allowed); return false;
+#endif
+}
+
 bool TorrentEngine::addMagnetResumed(const QString& hash, const QString& savePath)
 {
 #ifdef RATS_SEARCH_FEATURES
@@ -304,6 +383,26 @@ TorrentSnapshot TorrentEngine::status(const QString& hash) const
     snap.exists = st.exists;
     snap.hasMetadata = st.has_metadata;
     snap.isComplete = st.is_complete;
+    snap.paused = st.paused;
+    snap.contentAllowed = st.content_allowed;
+    snap.verifiedBytes = static_cast<qint64>(st.verified);
+    snap.queuedUploadBytes = static_cast<qint64>(st.uploaded);
+    snap.hashFailures = static_cast<qint64>(st.hash_failures);
+    snap.wantedBytes=st.wanted_bytes;snap.wantedVerifiedBytes=st.wanted_verified;
+    snap.selectionRevision=st.selection_revision;snap.selectedComplete=st.selected_complete;snap.fullTorrentComplete=st.full_complete;
+    switch (st.state) {
+    case bt::Torrent::State::Metadata: snap.phase = DownloadPhase::Metadata; break;
+    case bt::Torrent::State::Checking: snap.phase = DownloadPhase::Checking; break;
+    case bt::Torrent::State::Downloading: snap.phase = DownloadPhase::Downloading; break;
+    case bt::Torrent::State::Seeding: snap.phase = DownloadPhase::Seeding; break;
+    case bt::Torrent::State::PartialSeeding: snap.phase = DownloadPhase::PartialSeeding; break;
+    case bt::Torrent::State::Waiting: snap.phase = DownloadPhase::Waiting; break;
+    case bt::Torrent::State::Error: snap.phase = DownloadPhase::Error; break;
+    default: break;
+    }
+    snap.error = {QString::fromStdString(st.error.code),
+        st.error ? QString::fromStdString(std::error_code(st.error.system_code, std::generic_category()).message()) : QString(),
+        QString::fromStdString(st.error.operation), QString::fromStdString(st.error.path), st.error.system_code, st.error.retryable};
     snap.name = QString::fromStdString(st.name);
     snap.totalSize = static_cast<qint64>(st.total_size);
     snap.downloaded = static_cast<qint64>(st.downloaded);
@@ -312,6 +411,8 @@ TorrentSnapshot TorrentEngine::status(const QString& hash) const
     for (size_t i = 0; i < st.files.size(); ++i) {
         EngineFile f;
         f.path = QString::fromStdString(st.files[i].path);
+        f.verifiedBytes = static_cast<qint64>(st.files[i].verified);
+        f.priority=st.files[i].priority;
         f.size = static_cast<qint64>(st.files[i].size);
         snap.files.append(f);
     }
@@ -490,4 +591,63 @@ QString TorrentEngine::parseInfoHash(const QString& magnetLink)
     return QString();
 }
 
+void TorrentEngine::setFilePriorities(const QString& hash,const QVector<int>& priorities,qint64 expected,FileOperationCallback done) {
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash);auto* c=client();
+    if(c && ih) {
+        c->set_file_priorities(*ih,std::vector<int>(priorities.begin(),priorities.end()),expected,
+            [hash,done=std::move(done)](bt::DiskError error,std::uint64_t revision) mutable {
+                OperationResult r;r.hash=hash;r.revision=revision;r.outcome=error?OperationResult::Outcome::Rejected:OperationResult::Outcome::Applied;
+                if(error) r.error={QString::fromStdString(error.code),QString::fromStdString(error.code),QString::fromStdString(error.operation),QString::fromStdString(error.path),error.system_code,error.retryable};
+                done(r);
+            });return;
+    }
+#else
+    Q_UNUSED(priorities);Q_UNUSED(expected);
+#endif
+    OperationResult r;r.hash=hash;r.error={"engineUnavailable","Download engine is unavailable"};done(r);
+}
+void TorrentEngine::recheck(const QString& hash,bool retry,FileOperationCallback done) {
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash);auto* c=client();
+    if(c && ih) {
+        c->recheck_torrent(*ih,retry,[hash,done=std::move(done)](bt::DiskError error,std::uint64_t revision) mutable {
+            OperationResult r;r.hash=hash;r.revision=revision;r.outcome=error?OperationResult::Outcome::Rejected:OperationResult::Outcome::Applied;
+            if(error) r.error={QString::fromStdString(error.code),QString::fromStdString(error.code),QString::fromStdString(error.operation),QString::fromStdString(error.path),error.system_code,error.retryable};done(r);
+        });return;
+    }
+#else
+    Q_UNUSED(retry);
+#endif
+    OperationResult r;r.hash=hash;r.error={"engineUnavailable","Download engine is unavailable"};done(r);
+}
+bool TorrentEngine::setAdvancedPolicy(const QString& hash,const QString& strategy,bool automatic,int manual,int minimum,int maximum) {
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash);auto* c=client();if(!c || !ih)return false;
+    bt::DownloadStrategy mode;
+    if(strategy=="rarestFirst")mode=bt::DownloadStrategy::RarestFirst;else if(strategy=="sequential")mode=bt::DownloadStrategy::Sequential;else if(strategy=="firstLast")mode=bt::DownloadStrategy::FirstLast;else return false;
+    return c->set_download_strategy(*ih,mode,{automatic,manual,minimum,maximum});
+#else
+    Q_UNUSED(hash);Q_UNUSED(strategy);Q_UNUSED(automatic);Q_UNUSED(manual);Q_UNUSED(minimum);Q_UNUSED(maximum);return false;
+#endif
+}
+void TorrentEngine::setCacheBudget(qint64 bytes) {
+#ifdef RATS_SEARCH_FEATURES
+    if(auto* c=client())c->set_cache_budget(std::size_t(bytes));
+#else
+    Q_UNUSED(bytes);
+#endif
+}
+QJsonObject TorrentEngine::pieceMap(const QString& hash,int maximum) const {
+    QJsonArray ranges;
+#ifdef RATS_SEARCH_FEATURES
+    auto ih=toInfoHash(hash);auto* c=client();if(c && ih) {
+        for(const auto& r:c->piece_ranges(*ih,std::size_t(qBound(1,maximum,2048))))ranges.append(QJsonObject{{"begin",qint64(r.begin)},{"end",qint64(r.end)},{"verified",qint64(r.verified)},{"wanted",qint64(r.wanted)},{"active",qint64(r.active)},{"high",qint64(r.high)}});
+        return {{"hash",hash},{"ranges",ranges},{"cacheBytes",qint64(c->cache_bytes())}};
+    }
+#else
+    Q_UNUSED(maximum);
+#endif
+    return {{"hash",hash},{"ranges",ranges}};
+}
 } // namespace rats::net
