@@ -26,8 +26,8 @@ namespace rats::service {
 namespace {
 
 // GitHub repository the updater checks by default.
-constexpr char kDefaultRepoOwner[] = "DEgITx";
-constexpr char kDefaultRepoName[] = "rats-search";
+constexpr char kDefaultRepoOwner[] = "MikiyaKkt";
+constexpr char kDefaultRepoName[] = "rats-search-DEV";
 
 // Milliseconds to wait for an archive extraction subprocess before giving up.
 constexpr int kExtractionTimeoutMs = 120000;

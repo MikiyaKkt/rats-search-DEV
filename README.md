@@ -284,3 +284,6 @@ Subscribe to autor (GitHub donations): https://github.com/sponsors/DEgITx
 ## Download settings validation build
 
 The S3 build adds download strategies, bounded request windows, a shared read cache, weekly bandwidth schedules, seeding conditions and a piece map alongside the S1/S2 controls. See the [implementation report](docs/DOWNLOAD_S3_REPORT.md), [manual checklist](docs/DOWNLOAD_S3_VALIDATION.md), and [Windows build instructions](docs/BUILD_WINDOWS.md). The default build script produces an independent s3-fix1 ZIP for human validation. See the [fix1 report](docs/DOWNLOAD_S3_FIX1_REPORT.md) for remembered settings, startup progress, selection latency and localization fixes.
+# Fork release versions
+
+This fork maintains its own version in [VERSION](VERSION), independently of upstream tags. For a release, update that file and push a matching `vMAJOR.MINOR.PATCH` tag (for example, `v1.0.0`). Builds and update checks use this version, and the updater checks releases in `MikiyaKkt/rats-search-DEV`.
