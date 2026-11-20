@@ -5,10 +5,8 @@ on the build machine, then double-click [`build-windows.cmd`](../build-windows.c
 The first run downloads a portable toolchain into `.tools/`: aqtinstall 3.3.0,
 Qt 6.10.1, MinGW 13.1 x64, CMake, and the matching QMYSQL plugin/runtime.
 It also initializes missing Git submodules. Existing submodules and local
-changes are preserved. The build checks and applies the bundled
-[`librats-windows-utf8.patch`](../patches/librats-windows-utf8.patch) when needed,
-so a clean checkout also includes the Windows UTF-8 filesystem fix. An already
-applied patch is left alone; incompatible dependency changes stop the build.
+changes are preserved. The pinned librats fork includes the Windows UTF-8 and
+download fixes. The build rejects a submodule checkout that predates those fixes.
 
 The script builds Release, runs the application tests, deploys Qt and compiler
 runtime DLLs, copies Manticore, verifies the staged executable starts without
@@ -25,9 +23,8 @@ Set `-PackageSuffix <name>` to label another local package.
 Default builds also run the focused librats regression suite, using pinned
 GoogleTest v1.17.0 sources cached in `.tools/googletest-1.17.0`.
 
-The build applies `librats-windows-utf8.patch` followed by
-`librats-download-s0.patch`, then `librats-download-s1.patch`, `librats-download-s2.patch`, `librats-download-s3.patch`, and `librats-download-s3-fix1.patch`. It checks the final patch first so overlapping
-context from the preceding UTF-8 fix does not cause a false conflict on rebuild.
+The patches in `patches/` are retained as historical references; they are not
+applied during builds because the pinned fork already contains the changes.
 
 The MSVC runtime required by MySQL/Manticore is copied app-local from the build
 machine's System32 directory, alongside the MinGW runtime deployed by Qt.
@@ -62,8 +59,8 @@ The package uses the `libmysql.dll` supplied with QMYSQL, copied after Manticore
 and Qt deployment. Do not substitute the DLL in `imports/`: its ABI can differ
 and cause incorrect database field decoding.
 
-The UTF-8 filesystem changes live in the `src/librats` Git submodule and are
-also preserved in the parent repository's dependency patch. If those changes
-are edited, regenerate the patch with `git -C src/librats diff --binary`.
+The UTF-8 filesystem changes live in the forked `src/librats` Git submodule.
+Commit and push further dependency changes to the fork before updating the
+submodule pointer in the parent repository.
 
 Default builds also extract the actual ZIP into a Unicode directory and run the local Tracker/Seeder application smoke helper. The child uses only package/Windows runtime paths, a fresh ASCII database directory, and Unicode payload names/paths; it verifies exact downloaded bytes and policy persistence after a forced process restart. The helper owns only its test process tree and uses --no-remember-data-dir. -SkipTests skips both CTest and this smoke.

@@ -55,22 +55,10 @@ try {
             Invoke-Checked 'git' @('submodule', 'update', '--init', '--recursive', '--', $module)
         }
     }
-    # Keep the dependency fix reproducible without requiring a published fork.
-    # The final patch can overlap the UTF-8 patch's context. Check the final
-    # state first, otherwise apply the series in order without resetting edits.
-    $patches = @('librats-windows-utf8.patch', 'librats-download-s0.patch', 'librats-download-s1.patch', 'librats-download-s2.patch', 'librats-download-s3.patch', 'librats-download-s3-fix1.patch')
-    $patch = Join-Path $repo ('patches/' + $patches[-1])
-    & git -C src/librats apply --reverse --check --quiet $patch
-    if ($LASTEXITCODE -ne 0) {
-        foreach ($name in $patches) {
-            $patch = Join-Path $repo ('patches/' + $name)
-            & git -C src/librats apply --reverse --check --quiet $patch
-            if ($LASTEXITCODE -ne 0) {
-                Invoke-Checked 'git' @('-C', 'src/librats', 'apply', '--check', $patch)
-                Invoke-Checked 'git' @('-C', 'src/librats', 'apply', $patch)
-            }
-        }
-    }
+    # The pinned librats fork already contains the download and UTF-8 fixes.
+    # Refuse a stale checkout instead of silently building an unpatched engine.
+    & git -C src/librats merge-base --is-ancestor b9214ff5 HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'The librats submodule is outdated. Update it to the commit pinned by this repository.' }
     if (-not (Test-Path $aqt) -and (-not (Test-Path $cmake) -or -not (Test-Path "$compiler/g++.exe") -or -not (Test-Path "$qt/bin/windeployqt.exe"))) {
         Get-Download 'https://github.com/miurahr/aqtinstall/releases/download/v3.3.0/aqt_x64.exe' $aqt
     }
