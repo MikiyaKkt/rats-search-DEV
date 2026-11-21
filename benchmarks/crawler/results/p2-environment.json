@@ -1,0 +1,17 @@
+﻿{
+    "phase":  "P2",
+    "capturedUtc":  "2026-11-20T12:06:02.5280013Z",
+    "branch":  "feat/crawler-p0-observability",
+    "baseRevision":  "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+    "sourceModified":  true,
+    "qt":  "6.10.1",
+    "compiler":  "MinGW 13.1 x64",
+    "configuration":  "Release",
+    "database":  "Manticore 17.5.1",
+    "network":  "disabled in both benchmarks",
+    "binaries":  {
+                     "crawler_batch_benchmark.exe":  "c600087e0f02db6e04e4e7b4c38ce77646b09a3ff56b705c73eb63973c98c7b2",
+                     "RatsSearch.exe":  "2fbe12ade1fff41c367441942dd18428c143d8726d60a9f2fb6aa0907ca75578",
+                     "crawler_benchmark.exe":  "7a202157dbcea7d2ee181b8b189bf5e5d99d0fc90fe31e1043c6e2214b186202"
+                 }
+}

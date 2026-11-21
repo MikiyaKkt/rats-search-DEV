@@ -332,6 +332,8 @@ or they will be added automatically when you create or import a torrent.</source
 </context>
 <context>
     <name>MainWindow</name>
+    <message><source>Metadata requests: %1 active; configured limit: %2%3</source><translation>元数据请求：进行中 %1 个；配置上限 %2%3</translation></message>
+    <message><source>; waiting for capacity</source><translation>；正在等待可用容量</translation></message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="118"/>
         <source>Rats Search %1 - BitTorrent P2P Search Engine</source>
@@ -1516,6 +1518,15 @@ Do you want to install the update now?</source>
 </context>
 <context>
     <name>SettingsDialog</name>
+    <message><source>Metadata concurrency limit:</source><translation>元数据并发上限：</translation></message>
+    <message><source>Maximum concurrent crawler metadata requests. Capacity limits may keep the actual count lower. Changes apply after Save without restarting.</source><translation>爬虫同时获取元数据的请求上限。容量限制可能使实际请求数更低。保存后生效，无需重启。</translation></message>
+    <message><source>Current activity:</source><translation>当前活动：</translation></message>
+    <message><source>%1 active; saved limit %2%3</source><translation>进行中 %1 个；已保存上限 %2%3</translation></message>
+    <message><source>; waiting for capacity</source><translation>；正在等待可用容量</translation></message>
+    <message><source>Pending task limit:</source><translation>待处理任务上限：</translation></message>
+    <message><source>Shared task limit for lookups, result reservations, writes and retries. The 64 MiB estimated byte budget also applies.</source><translation>查重、结果预留、入库及重试共用的任务上限。同时受估算 64 MiB 的字节预算约束。</translation></message>
+    <message><source>Database batch size:</source><translation>数据库批次大小：</translation></message>
+    <message><source>Maximum items per database batch. Sparse batches still flush after 100 ms.</source><translation>每个数据库批次的最大任务数。不满一批仍会在等待 100 毫秒后提交。</translation></message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="28"/>
         <source>Settings</source>

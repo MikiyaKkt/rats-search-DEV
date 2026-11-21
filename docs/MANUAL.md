@@ -9,6 +9,60 @@
 
 ## Documentation
 
+### Crawler concurrency
+
+In Settings → Indexer → Spider Performance, **Metadata concurrency limit** controls
+how many crawler metadata requests may run together (1–64, default 10). The current
+activity label shows the saved limit separately from active requests. Pending edits
+take effect after Save without restarting; reducing the limit allows existing
+requests to finish before more are started. Hover over the main window's Spider
+indicator for the same activity information.
+
+**Pending task limit** (1–1,000) covers hash lookups, result reservations, database
+writes and retries. **Database batch size** (1–100) controls the maximum task count
+per database batch; sparse batches still submit after 100 ms. Keep the defaults
+unless measurements show a benefit. Larger concurrency does not guarantee faster
+indexing: each metadata request first reserves an estimated 4 MiB from the shared
+64 MiB budget, and backpressure or database/notification throughput may limit it.
+These are estimated payload limits rather than a process memory/RSS cap.
+
+The same controls are available in the [configuration API](API.md). See the
+[P4 implementation report](CRAWLER_P4_REPORT.md) for measurements and limitations.
+
+### Crawler overload, retries and shutdown
+
+The crawler is a best-effort discovery service. Its 5,000 discovery slots include
+queued announcements and active/retrying candidates; a full entrance drops new
+announcements and counts the rejection. Duplicate announcements can add up to
+three peer addresses without creating another active candidate. The metadata
+waiting queue is also bounded (1,024 requests / an estimated 1 MiB).
+
+At 80% of either task or byte capacity, new metadata requests pause. They resume
+only after both capacities fall to 50% or lower, without needing a new
+announcement. Already reserved results continue into the database. A network
+result exceeding its 4 MiB estimate limit ends without retry; database rows
+exceeding the SQL statement limit are also terminal. These estimates do not cap
+process RSS or the database daemon's memory.
+
+Timeouts retry through the bounded peer list; temporary database failures retry
+using the metadata already fetched. Each layer allows at most three retries,
+with exponential backoff, jitter and a deadline for starting further retries.
+The retry queues share normal capacity. Invalid data, filter rejection and row-ID
+collisions do not retry. A long outage can exhaust retries, so recovery does not
+guarantee every previously announced hash is inserted.
+
+Stopping cancels pending/retrying work and undelivered notifications. A SQL write
+already executing may commit before its notification is cancelled; committed
+rows remain, and database statistics are restored from storage on restart.
+Unstarted tasks and retry state are held in memory and are not a durable queue.
+Network results from an older run cannot enter the new run. Their reserved
+capacity stays charged until the callbacks settle or transport shutdown joins
+them. The application joins workers and network callbacks before closing the
+database; it never force-kills a database worker to meet a UI timeout.
+
+See [P5 validation](CRAWLER_P5_REPORT.md) for deterministic fault tests, lifecycle
+and soak evidence, and the limits of the network measurements.
+
 ### Configuration
 * [Server Configuration](SERVER.md)
 * [API Documentation](API.md)

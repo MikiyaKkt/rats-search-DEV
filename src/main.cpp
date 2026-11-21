@@ -18,6 +18,7 @@
 #include "bootstrap/single_instance.h"
 #include "bootstrap/startupinfo.h"
 #include "common/logging.h"
+#include "common/performance_metrics.h"
 #include "librats/util/logger.h"
 #include "mainwindow.h"
 #include "migrationprogresswindow.h"
@@ -163,6 +164,11 @@ static void configureLogging(const QString& dataDir)
 #else
     logger.set_log_level(librats::LogLevel::DEBUG);
 #endif
+    if (qEnvironmentVariableIntValue("RATS_VERBOSE_CRAWLER") == 1) {
+        logger.set_log_level(librats::LogLevel::DEBUG);
+        QLoggingCategory::setFilterRules(QString::fromUtf8(qgetenv("QT_LOGGING_RULES"))
+            + QStringLiteral("\nrats.crawler.detail.debug=true"));
+    }
     qInfo() << "Log file:" << logFilePath;
     logStartupInfo(dataDir);
 }

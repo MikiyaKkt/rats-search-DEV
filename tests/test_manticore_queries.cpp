@@ -17,6 +17,7 @@
 #include <QtTest/QtTest>
 
 #include "data/database.h"
+#include "common/performance_metrics.h"
 #include "data/manticore.h"
 #include "data/query.h"
 #include "data/row_id.h"
@@ -28,6 +29,9 @@
 #include "services/database_importer.h"
 #include "services/filter_policy.h"
 #include "services/indexing_service.h"
+#include "services/crawler_pipeline.h"
+#include <thread>
+#include <atomic>
 
 using rats::data::Database;
 using rats::data::Manticore;
@@ -66,6 +70,14 @@ private slots:
     void testBatchDuplicateHashCollapsesToOneRow();
     void testMigrationReKeysLegacyRows();
     void testUpdateAppliesAndKeepsSearchable();
+    void testFileSearchDoesNotExposeSnippetsAsFiles();
+    void testBackfillMissingAndPartialFiles();
+    void testDatabaseMetricOutcomes();
+    void testIndexingMetricOutcomes();
+    void testConcurrentIndexAndPartialWrites();
+    void testConcurrentInsertAndDeleteStatistics();
+    void testCrawlerWorkerConnectionsAndMainThreadSql();
+    void testCrawlerReconnectsAfterDaemonRestart();
 
     void testExportImportRoundTrip();
     void testImportIsAMergeNotADuplicate();
@@ -89,6 +101,243 @@ private:
     rats::service::FilterPolicy* filter_ = nullptr;
     rats::service::IndexingService* indexing_ = nullptr;
 };
+
+void TestManticoreQueries::testConcurrentIndexAndPartialWrites()
+{
+    const auto before = repo_->statistics();
+    Torrent t = makeTorrent(92001, "Concurrent insertion fixture");
+    std::atomic<int> failures{0}, inserted{0};
+    auto index = [&](bool batch) {
+        rats::service::FilterPolicy policy;
+        rats::service::IndexingService indexing(repo_, &policy);
+        for (int i = 0; i < 20; ++i) {
+            Torrent incoming = t;
+            if (i % 2 == 0) incoming.hash = incoming.hash.toUpper();
+            if (batch) inserted += indexing.insertBatch({incoming}).inserted;
+            else {
+                const auto result = indexing.insert(incoming);
+                if (!result.success) ++failures;
+                else if (!result.alreadyExists) ++inserted;
+            }
+        }
+        manticore_->closeCurrentThreadConnection();
+    };
+    std::thread one(index, false), two(index, true), three(index, false);
+    one.join(); two.join(); three.join();
+    QCOMPARE(failures.load(), 0);
+    QCOMPARE(inserted.load(), 1);
+    QCOMPARE(repo_->statistics().torrents, before.torrents + 1);
+    QCOMPARE(repo_->statistics().files, before.files + t.files);
+    QCOMPARE(repo_->statistics().totalSize, before.totalSize + t.size);
+    const QVector<File> files{{"one.mkv", 12}, {"two.mkv", 34}};
+    auto run = [&](int lane) {
+        for (int i = 0; i < 20; ++i) {
+            bool ok = false;
+            if (lane == 0) ok = repo_->incrementVote(t.hash, true).has_value();
+            if (lane == 1) ok = repo_->updateTrackerCounts(t.hash, 77, 8, 9);
+            if (lane == 2) ok = repo_->updateFiles(t.hash, files);
+            if (lane == 3) ok = repo_->mergeInfo(t.hash, {{QString::number(i), i}});
+            if (!ok) ++failures;
+        }
+        manticore_->closeCurrentThreadConnection();
+    };
+    std::thread vote(run, 0), tracker(run, 1), details(run, 2), info(run, 3);
+    vote.join(); tracker.join(); details.join(); info.join();
+    QCOMPARE(failures.load(), 0);
+    const auto stored = repo_->get(t.hash, true);
+    QVERIFY(stored);
+    QCOMPARE(stored->good, 20);
+    QCOMPARE(stored->seeders, 77);
+    QCOMPARE(stored->files, 2);
+    QCOMPARE(stored->fileList.size(), 2);
+    QCOMPARE(stored->info.size(), 20);
+    QCOMPARE(repo_->statistics().files, before.files + 2);
+    QVERIFY(repo_->remove(t.hash));
+}
+
+void TestManticoreQueries::testConcurrentInsertAndDeleteStatistics()
+{
+    const auto before = repo_->statistics();
+    Torrent t = makeTorrent(92002, "Insert delete fixture", ContentType::Video, 0);
+    t.files = 0;
+    std::atomic<int> failures{0};
+    auto run = [&](bool deleting) {
+        rats::service::IndexingService indexing(repo_, nullptr);
+        for (int i = 0; i < 30; ++i) {
+            if (deleting) { if (!repo_->remove(t.hash)) ++failures; }
+            else if (!indexing.insert(t).success) ++failures;
+        }
+        manticore_->closeCurrentThreadConnection();
+    };
+    std::thread add(run, false), remove(run, true);
+    add.join(); remove.join();
+    QCOMPARE(failures.load(), 0);
+    QVERIFY(repo_->remove(t.hash));
+    QVERIFY(!repo_->exists(t.hash));
+    QCOMPARE(repo_->statistics().torrents, before.torrents);
+    QCOMPARE(repo_->statistics().files, before.files);
+    QCOMPARE(repo_->statistics().totalSize, before.totalSize);
+}
+
+void TestManticoreQueries::testCrawlerWorkerConnectionsAndMainThreadSql()
+{
+    auto& metrics = rats::common::PerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    const auto connections = QSqlDatabase::connectionNames();
+    rats::service::CrawlerPipeline pipeline(repo_, manticore_);
+    connect(&pipeline, &rats::service::CrawlerPipeline::torrentIndexed, indexing_,
+        &rats::service::IndexingService::torrentIndexed);
+    QSignalSpy indexed(indexing_, &rats::service::IndexingService::torrentIndexed);
+    for (int run = 0; run < 100; ++run) {
+        const auto before = metrics.snapshot()["counters"].toObject();
+        Torrent t = makeTorrent(192010 + run, "Crawler worker fixture");
+        pipeline.start();
+        bool checked = false;
+        QCOMPARE(pipeline.checkKnown(t.hash, [&](bool known) { checked = !known; }),
+            rats::service::CrawlerPipeline::Admission::Accepted);
+        QCOMPARE(pipeline.insert(t), rats::service::CrawlerPipeline::Admission::Accepted);
+        QTRY_COMPARE_WITH_TIMEOUT(pipeline.pending(), 0, 10000);
+        QVERIFY(checked);
+        const auto after = metrics.snapshot()["counters"].toObject();
+        QCOMPARE(after["db.main_query_calls"].toInteger(), before["db.main_query_calls"].toInteger());
+        QCOMPARE(after["db.main_write_calls"].toInteger(), before["db.main_write_calls"].toInteger());
+        QVERIFY(after["db.write_calls"].toInteger() > before["db.write_calls"].toInteger());
+        pipeline.stop();
+        QCOMPARE(QSqlDatabase::connectionNames().size(), connections.size());
+        QVERIFY(repo_->remove(t.hash));
+    }
+    QCOMPARE(indexed.count(), 100);
+}
+
+void TestManticoreQueries::testCrawlerReconnectsAfterDaemonRestart()
+{
+    // Keep the worker's connection alive while the actual temporary daemon goes
+    // away. A virtual retry clock holds retries until it has restarted, avoiding
+    // a machine-speed dependency between daemon startup and the retry budget.
+    std::atomic<qint64> now{1000000000LL};
+    rats::service::CrawlerPipeline::Backend backend;
+    backend.knownBatch=[&](const QStringList& hashes){return repo_->checkMany(hashes);};
+    backend.close=[&]{manticore_->closeCurrentThreadConnection();};
+    backend.timing.clock=[&]{return now.load();};backend.timing.jitter=[](int){return 0;};
+    rats::service::CrawlerPipeline pipeline(backend);pipeline.start();pipeline.configure(1000,1);
+    bool first=false;pipeline.checkState(makeTorrent(192251,"connection warmup").hash,[&](auto state){first=state==rats::domain::HashState::Missing;});
+    QTRY_VERIFY(first);QTRY_COMPARE(pipeline.pending(),0);
+    auto& metrics=rats::common::PerformanceMetrics::instance();
+    const auto retryBefore=metrics.snapshot()["counters"].toObject()["crawler.db_retries"].toInteger();
+    const int port=manticore_->port();manticore_->stop();
+    bool replied=false;rats::domain::HashState answer=rats::domain::HashState::Failed;
+    pipeline.checkState(makeTorrent(192252,"after disconnect").hash,[&](auto state){replied=true;answer=state;});
+    QTRY_VERIFY_WITH_TIMEOUT(metrics.snapshot()["counters"].toObject()["crawler.db_retries"].toInteger()>retryBefore,10000);
+    QVERIFY(!replied); // Disconnection must not masquerade as Missing.
+    QVERIFY(manticore_->start());QVERIFY(manticore_->waitForReady());QCOMPARE(manticore_->port(),port);
+    now+=2000000000LL;
+    QTRY_VERIFY_WITH_TIMEOUT(replied,10000);QCOMPARE(answer,rats::domain::HashState::Missing);
+    QTRY_COMPARE(pipeline.pending(),0);pipeline.stop();
+}
+
+void TestManticoreQueries::testDatabaseMetricOutcomes()
+{
+    auto& m = rats::common::PerformanceMetrics::instance();
+    m.setEnabled(true);
+    const auto before = m.snapshot()["counters"].toObject();
+    bool ok = true;
+    db_->query("SELECT missing_p0_column FROM torrents", {}, &ok);
+    QVERIFY(!ok);
+    db_->query("SELECT id FROM torrents LIMIT 1", {}, &ok);
+    QVERIFY(ok);
+    QVERIFY(!db_->execute("UPDATE missing_p0_table SET files = 1 WHERE id = 1"));
+    const auto after = m.snapshot()["counters"].toObject();
+    auto delta = [&](const QString& key) { return after[key].toInteger() - before[key].toInteger(); };
+    QCOMPARE(delta("db.query_calls"), 2);
+    QCOMPARE(delta("db.query_failed"), 1);
+    QCOMPARE(delta("db.query_ok"), 1);
+    QCOMPARE(delta("db.main_query_calls"), 2);
+    QCOMPARE(delta("db.write_failed"), 1);
+    QCOMPARE(delta("db.main_write_calls"), 1);
+}
+
+void TestManticoreQueries::testIndexingMetricOutcomes()
+{
+    auto& m = rats::common::PerformanceMetrics::instance();
+    const auto before = m.snapshot()["counters"].toObject();
+    rats::service::FilterSettings settings;
+    settings.maxFiles = 1;
+    rats::service::FilterPolicy filter(settings);
+    rats::service::IndexingService indexing(repo_, &filter);
+    Torrent t = makeTorrent(91004, "Metric outcome fixture");
+    QVERIFY(indexing.insert(t).success);
+    QVERIFY(indexing.insert(t).alreadyExists);
+    QVERIFY(!indexing.insert(Torrent {}).success);
+    Torrent rejected = makeTorrent(91005, "Rejected metric fixture");
+    rejected.files = 2;
+    QVERIFY(!indexing.insert(rejected).success);
+    const auto after = m.snapshot()["counters"].toObject();
+    auto delta = [&](const QString& key) { return after[key].toInteger() - before[key].toInteger(); };
+    QCOMPARE(delta("index.single_attempts"), 4);
+    QCOMPARE(delta("index.inserted"), 1);
+    QCOMPARE(delta("index.merged"), 1);
+    QCOMPARE(delta("index.invalid"), 1);
+    QCOMPARE(delta("index.rejected"), 1);
+    QVERIFY(repo_->remove(t.hash));
+}
+
+void TestManticoreQueries::testFileSearchDoesNotExposeSnippetsAsFiles()
+{
+    Torrent t = makeTorrent(91001, "Collection without matching title");
+    t.files = 3;
+    t.fileList = { { "folder/uniquefilematch.mkv", 100 }, { "folder/other.txt", 20 }, { "readme.txt", 5 } };
+    QVERIFY(repo_->add(t));
+    QVERIFY(waitForFiles(t.hash, 3));
+    TorrentRepository::SearchQuery q;
+    q.text = "uniquefilematch";
+    const auto hits = repo_->searchFiles(q);
+    QCOMPARE(hits.size(), 1);
+    QCOMPARE(hits.first().torrent.files, 3);
+    QVERIFY(!hits.first().matchingPaths.isEmpty());
+    QVERIFY(hits.first().torrent.fileList.isEmpty());
+    QCOMPARE(repo_->filesOf(t.hash).size(), 3);
+    QVERIFY(repo_->remove(t.hash));
+}
+
+void TestManticoreQueries::testBackfillMissingAndPartialFiles()
+{
+    for (bool batch : { false, true }) {
+        Torrent t = makeTorrent(batch ? 91003 : 91002, "File list repair");
+        t.files = 3; // A known count does not prove details have been stored.
+        QVERIFY(repo_->add(t));
+        QVERIFY(waitForTorrent(t.hash));
+        const auto before = repo_->statistics();
+        t.fileList = { { "one.txt", 1 }, { "two.txt", 2 }, { "three.txt", 3 } };
+        auto merge = [&]() {
+            if (batch)
+                QCOMPARE(indexing_->insertBatch({ t }).merged, 1);
+            else
+                QVERIFY(indexing_->insert(t).success);
+        };
+        const auto complete = t.fileList;
+        t.fileList.resize(1);
+        merge();
+        QVERIFY(repo_->filesOf(t.hash).isEmpty());
+        QCOMPARE(repo_->get(t.hash)->files, 3);
+        t.fileList = complete;
+        merge();
+        QVERIFY(waitForFiles(t.hash, 3));
+        // Simulate a truncated details row without changing the summary count.
+        QVERIFY(db_->replace("files", { { "id", rats::data::rowIdFromHash(t.hash) },
+            { "hash", t.hash }, { "path", "one.txt" }, { "size", "1" } }));
+        QVERIFY(waitForFiles(t.hash, 1));
+        t.good = 10; // The vote rewrite must preserve the repaired count.
+        merge();
+        QVERIFY(waitForFiles(t.hash, 3));
+        QCOMPARE(repo_->get(t.hash)->files, 3);
+        QCOMPARE(repo_->statistics().files, before.files);
+        // A later partial copy must never replace the complete list.
+        t.fileList.resize(1);
+        merge();
+        QCOMPARE(repo_->filesOf(t.hash).size(), 3);
+        QVERIFY(repo_->remove(t.hash));
+    }
+}
 
 Torrent TestManticoreQueries::makeTorrent(int n, const QString& name, ContentType type, qint64 size, int seeders)
 {
@@ -415,11 +664,12 @@ void TestManticoreQueries::testRowIdCollisionIsRefused()
     Torrent second = makeTorrent(2, "Collision Second");
     second.hash = shared + QString(24, QLatin1Char('2'));
     QCOMPARE(rats::data::rowIdFromHash(first.hash), rats::data::rowIdFromHash(second.hash));
-
+    const auto staleSlot = repo_->resolve(second.hash);
     QVERIFY(repo_->add(first));
     QVERIFY(waitForTorrent(first.hash));
 
     QVERIFY2(!repo_->add(second), "a torrent whose row id belongs to another must be refused");
+    QVERIFY2(!repo_->add(second, staleSlot), "a stale empty slot must not bypass collision checks");
 
     // The original survives untouched, and the impostor is not findable.
     const auto stored = repo_->get(first.hash);
@@ -479,7 +729,7 @@ void TestManticoreQueries::testBatchRowIdCollisionIsRefused()
 // ordinary dedupe rather than a refusal. Dump batches repeat hashes routinely.
 void TestManticoreQueries::testBatchDuplicateHashCollapsesToOneRow()
 {
-    Torrent t = makeTorrent(1, "Batch Duplicate");
+    Torrent t = makeTorrent(92030, "Batch Duplicate");
     const auto before = repo_->statistics();
 
     QCOMPARE(repo_->addMany({ t, t }), 1);
@@ -489,6 +739,11 @@ void TestManticoreQueries::testBatchDuplicateHashCollapsesToOneRow()
     const auto stored = repo_->get(t.hash);
     QVERIFY(stored.has_value());
     QCOMPARE(stored->name, QString("Batch Duplicate"));
+    // Replaying a batch must not overwrite an existing row or increment stats.
+    t.name = "Stale replay";
+    QCOMPARE(repo_->addMany({t, t}), 0);
+    QCOMPARE(repo_->statistics().torrents, before.torrents + 1);
+    QCOMPARE(repo_->get(t.hash)->name, QString("Batch Duplicate"));
 }
 
 void TestManticoreQueries::testMigrationReKeysLegacyRows()

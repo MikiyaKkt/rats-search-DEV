@@ -117,8 +117,10 @@ void TorrentFilesWidget::setFiles(const QString& hash, const QString& name, cons
 void TorrentFilesWidget::setTorrent(const rats::domain::Torrent& torrent)
 {
     QVector<File> files = torrent.fileList;
-    if (files.isEmpty() && app_ && app_->torrents()) {
-        files = app_->torrents()->filesOf(torrent.hash);
+    if ((files.isEmpty() || files.size() < torrent.files) && app_ && app_->torrents()) {
+        const auto stored = app_->torrents()->filesOf(torrent.hash);
+        if (stored.size() >= files.size())
+            files = stored;
     }
     setFiles(torrent.hash, torrent.name, files);
 }
@@ -130,6 +132,7 @@ bool TorrentFilesWidget::hasFiles() const
 
 void TorrentFilesWidget::clear()
 {
+    fileCount_ = 0;
     currentHash_.clear();
     currentName_.clear();
     filesTree_->clear();

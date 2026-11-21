@@ -46,6 +46,11 @@ DatabaseImporter::Result DatabaseImporter::run(
         result.merged += applied.merged;
         result.rejected += applied.rejected;
         result.collided += applied.collided;
+        if (applied.failed > 0) {
+            result.error = QStringLiteral("Database batch partially failed; resume from the previous frame");
+            if (onProgress) onProgress(result);
+            return result; // offset stays before this frame; replay is idempotent
+        }
         result.offset = reader.offset();
         if (onProgress)
             onProgress(result);

@@ -1,0 +1,16 @@
+{
+    "started_utc":  "2026-11-21T04:33:28.9651615Z",
+    "seconds":  7200,
+    "cycles":  100,
+    "controlled_sha256":  "d45f8669ff14848c3cf6a915876eb1b059ef37253b34fcff8c4b6bb46dc97180",
+    "live_sha256":  "8b98d5c6fb7b3021e610f9659cf06c1a3ab095d7a64496708cc2fcd06bce2bc8",
+    "controlled":  "E:\\Project\\rats-search-dev\\build-windows-x64\\p5-two-hour-final\\controlled.json",
+    "live":  "E:\\Project\\rats-search-dev\\build-windows-x64\\p5-two-hour-final\\live.json",
+    "completed":  true,
+    "controlled_pid":  7012,
+    "live_pid":  36716,
+    "ended_utc":  "2026-11-21T06:33:32.5165536Z",
+    "controlled_exit_code":  0,
+    "live_exit_code":  0,
+    "cancelled":  false
+}

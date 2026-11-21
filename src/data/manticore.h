@@ -55,6 +55,8 @@ public:
      * @note Must call start() first
      */
     QSqlDatabase getDatabase() const;
+    // Call on the thread that used the connection, after its last SQL handle.
+    void closeCurrentThreadConnection() const;
 
     /**
      * @brief Wait for Manticore to be ready (blocking)

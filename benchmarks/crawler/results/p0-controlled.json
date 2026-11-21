@@ -1,0 +1,2772 @@
+{
+    "cpu_arch": "x86_64",
+    "network": "disabled; fixtures enter IndexingService, not DHT",
+    "os": "Windows 11 Version 26H2",
+    "qt": "6.10.1",
+    "runs": [
+        {
+            "elapsed_ms": 283.3273,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1058.84607660469,
+            "inserted": 300,
+            "inserted_per_minute": 63530.764596281406,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 283.9599,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 1,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 178.1973,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1683.5271914894333,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 178.564,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 1,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 93.073,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 644.6552705940499,
+            "inserted": 60,
+            "inserted_per_minute": 38679.31623564299,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 93.5188,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 1,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 18.3946,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 16309.134202428973,
+            "inserted": 300,
+            "inserted_per_minute": 978548.0521457384,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 18.7442,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 1,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 252.1696,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1189.675519967514,
+            "inserted": 300,
+            "inserted_per_minute": 71380.53119805084,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 252.8004,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4187,
+                        "mean": 0.2794726666666667,
+                        "p50": 0.2715,
+                        "p95": 0.3396,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.4514,
+                        "mean": 0.25732733333333335,
+                        "p50": 0.2534,
+                        "p95": 0.3081,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.4196,
+                        "mean": 0.2804070000000001,
+                        "p50": 0.2725,
+                        "p95": 0.3407,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.4524,
+                        "mean": 0.25827300000000025,
+                        "p50": 0.2545,
+                        "p95": 0.309,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4216,
+                        "mean": 0.2824216666666668,
+                        "p50": 0.2745,
+                        "p95": 0.3427,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 6e-04,
+                        "mean": 0.00021633333333333297,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.8037,
+                        "mean": 0.5560726666666667,
+                        "p50": 0.5512,
+                        "p95": 0.6329,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.0967,
+                        "mean": 0.8399396666666669,
+                        "p50": 0.8308,
+                        "p95": 0.951,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 1,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 175.039,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1713.9037585909427,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 175.6523,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.4388,
+                        "mean": 0.27931466666666677,
+                        "p50": 0.2849,
+                        "p95": 0.3538,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.4397,
+                        "mean": 0.2803086666666665,
+                        "p50": 0.2859,
+                        "p95": 0.3548,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4582,
+                        "mean": 0.3276766666666667,
+                        "p50": 0.3216,
+                        "p95": 0.3852,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 0.743,
+                        "mean": 0.5827200000000001,
+                        "p50": 0.5767,
+                        "p95": 0.6517,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 1,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 95.1109,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 630.8425217298964,
+            "inserted": 60,
+            "inserted_per_minute": 37850.55130379378,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 95.4988,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.4305,
+                        "mean": 0.3045999999999999,
+                        "p50": 0.2917,
+                        "p95": 0.3834,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 0.9961,
+                        "mean": 0.5007425000000001,
+                        "p50": 0.3768,
+                        "p95": 0.8163,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.4313,
+                        "mean": 0.30559500000000006,
+                        "p50": 0.2926,
+                        "p95": 0.3845,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 0.9973,
+                        "mean": 0.501825,
+                        "p50": 0.3778,
+                        "p95": 0.8174,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.4344,
+                        "mean": 0.3077933333333333,
+                        "p50": 0.2947,
+                        "p95": 0.3868,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 5e-04,
+                        "mean": 0.00025000000000000006,
+                        "p50": 2e-04,
+                        "p95": 5e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.543,
+                        "mean": 1.2748333333333337,
+                        "p50": 1.2438,
+                        "p95": 1.4324,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 1.8729,
+                        "mean": 1.5843916666666664,
+                        "p50": 1.5629,
+                        "p95": 1.7982,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 1,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 17.9381,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 16724.179260902773,
+            "inserted": 300,
+            "inserted_per_minute": 1003450.7556541663,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 18.2891,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.5269,
+                        "mean": 0.47533333333333333,
+                        "p50": 0.5217,
+                        "p95": 0.5269,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 1.8847,
+                        "mean": 1.6291500000000003,
+                        "p50": 1.5463,
+                        "p95": 1.8847,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.5287,
+                        "mean": 0.47703333333333325,
+                        "p50": 0.5232,
+                        "p95": 0.5287,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 1.8858,
+                        "mean": 1.63065,
+                        "p50": 1.5485,
+                        "p95": 1.8858,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.5831,
+                        "mean": 0.5278,
+                        "p50": 0.5822,
+                        "p95": 0.5831,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 6.2128,
+                        "mean": 5.964366666666667,
+                        "p50": 5.8963,
+                        "p95": 6.2128,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 5.5701,
+                        "mean": 5.3739333333333335,
+                        "p50": 5.4105,
+                        "p95": 5.5701,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 1,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 254.2968,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1179.7238502411356,
+            "inserted": 300,
+            "inserted_per_minute": 70783.43101446814,
+            "log_bytes": 75900,
+            "log_lines": 1200,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 255.0528,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4464,
+                        "mean": 0.2821566666666666,
+                        "p50": 0.2751,
+                        "p95": 0.3311,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.5022,
+                        "mean": 0.2582928333333336,
+                        "p50": 0.2519,
+                        "p95": 0.3067,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.4469,
+                        "mean": 0.28269800000000006,
+                        "p50": 0.2756,
+                        "p95": 0.3316,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.5028,
+                        "mean": 0.2589373333333335,
+                        "p50": 0.2526,
+                        "p95": 0.3072,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4485,
+                        "mean": 0.28415366666666647,
+                        "p50": 0.2771,
+                        "p95": 0.333,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 5e-04,
+                        "mean": 0.00021766666666666638,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.8485,
+                        "mean": 0.5560966666666666,
+                        "p50": 0.547,
+                        "p95": 0.6502,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.2529,
+                        "mean": 0.8468836666666668,
+                        "p50": 0.8329,
+                        "p95": 0.9821,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 1,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 179.5475,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1670.8670407552318,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 38700,
+            "log_lines": 600,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 180.0283,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.5146,
+                        "mean": 0.28764616666666665,
+                        "p50": 0.2903,
+                        "p95": 0.3616,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.5152,
+                        "mean": 0.2882933333333333,
+                        "p50": 0.291,
+                        "p95": 0.3622,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.5272,
+                        "mean": 0.33653599999999995,
+                        "p50": 0.3297,
+                        "p95": 0.3978,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 0.8326,
+                        "mean": 0.5975239999999996,
+                        "p50": 0.5879,
+                        "p95": 0.6783,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 1,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 99.6128,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 602.3322303960937,
+            "inserted": 60,
+            "inserted_per_minute": 36139.93382376563,
+            "log_bytes": 15300,
+            "log_lines": 240,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 102.1092,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.4888,
+                        "mean": 0.3219483333333333,
+                        "p50": 0.3159,
+                        "p95": 0.3891,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 1.0299,
+                        "mean": 0.5257308333333335,
+                        "p50": 0.3799,
+                        "p95": 0.9317,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.4924,
+                        "mean": 0.32261,
+                        "p50": 0.3165,
+                        "p95": 0.3896,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 1.034,
+                        "mean": 0.5265391666666666,
+                        "p50": 0.3806,
+                        "p95": 0.9327,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.4953,
+                        "mean": 0.3242283333333335,
+                        "p50": 0.3177,
+                        "p95": 0.3912,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 7e-04,
+                        "mean": 0.00025000000000000006,
+                        "p50": 2e-04,
+                        "p95": 4e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.6757,
+                        "mean": 1.3258483333333335,
+                        "p50": 1.318,
+                        "p95": 1.5755,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 1.9679,
+                        "mean": 1.6574933333333337,
+                        "p50": 1.6581,
+                        "p95": 1.9122,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 1,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 21.331,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 14064.038254184052,
+            "inserted": 300,
+            "inserted_per_minute": 843842.295251043,
+            "log_bytes": 720,
+            "log_lines": 9,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 25.2103,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.6934,
+                        "mean": 0.5296333333333333,
+                        "p50": 0.4799,
+                        "p95": 0.6934,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 2.2579,
+                        "mean": 1.9384000000000003,
+                        "p50": 1.6912,
+                        "p95": 2.2579,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.6965,
+                        "mean": 0.5314333333333333,
+                        "p50": 0.4814,
+                        "p95": 0.6965,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 2.2597,
+                        "mean": 1.9397333333333335,
+                        "p50": 1.6926,
+                        "p95": 2.2597,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.769,
+                        "mean": 0.5895333333333334,
+                        "p50": 0.534,
+                        "p95": 0.769,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 7.0864,
+                        "mean": 7.054866666666666,
+                        "p50": 7.0495,
+                        "p95": 7.0864,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 6.5563,
+                        "mean": 6.400566666666666,
+                        "p50": 6.4502,
+                        "p95": 6.5563,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 1,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 246.6781,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1216.159845563915,
+            "inserted": 300,
+            "inserted_per_minute": 72969.5907338349,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 247.3735,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4549,
+                        "mean": 0.2709476666666666,
+                        "p50": 0.2642,
+                        "p95": 0.3245,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.3739,
+                        "mean": 0.2525176666666668,
+                        "p50": 0.2479,
+                        "p95": 0.299,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.456,
+                        "mean": 0.2718393333333334,
+                        "p50": 0.2651,
+                        "p95": 0.3254,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.375,
+                        "mean": 0.25345199999999996,
+                        "p50": 0.2488,
+                        "p95": 0.3,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4586,
+                        "mean": 0.2738906666666664,
+                        "p50": 0.267,
+                        "p95": 0.3275,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 6e-04,
+                        "mean": 0.00021299999999999954,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.7106,
+                        "mean": 0.5462433333333337,
+                        "p50": 0.5417,
+                        "p95": 0.6197,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.0836,
+                        "mean": 0.821650333333333,
+                        "p50": 0.8135,
+                        "p95": 0.9124,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 2,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 176.3607,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1701.0592495947226,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 176.8055,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.5813,
+                        "mean": 0.2814144999999996,
+                        "p50": 0.2855,
+                        "p95": 0.3547,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.5831,
+                        "mean": 0.28235599999999983,
+                        "p50": 0.2864,
+                        "p95": 0.3561,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.6122,
+                        "mean": 0.33009233333333327,
+                        "p50": 0.3216,
+                        "p95": 0.3809,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 0.9514,
+                        "mean": 0.5871080000000002,
+                        "p50": 0.5768,
+                        "p95": 0.6626,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 2,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 94.6891,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 633.6526590705794,
+            "inserted": 60,
+            "inserted_per_minute": 38019.15954423477,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 95.0436,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.4137,
+                        "mean": 0.30380333333333315,
+                        "p50": 0.2928,
+                        "p95": 0.3824,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 0.9797,
+                        "mean": 0.497049166666667,
+                        "p50": 0.4237,
+                        "p95": 0.8454,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.4145,
+                        "mean": 0.30551999999999996,
+                        "p50": 0.2937,
+                        "p95": 0.3833,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 0.9806,
+                        "mean": 0.4980933333333333,
+                        "p50": 0.4249,
+                        "p95": 0.8471,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.4168,
+                        "mean": 0.3076699999999999,
+                        "p50": 0.2958,
+                        "p95": 0.3853,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 8e-04,
+                        "mean": 0.00024500000000000005,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.6125,
+                        "mean": 1.2680600000000004,
+                        "p50": 1.2437,
+                        "p95": 1.4994,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 2.0131,
+                        "mean": 1.5774066666666664,
+                        "p50": 1.5496,
+                        "p95": 1.8422,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 2,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 17.9409,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 16721.56915204923,
+            "inserted": 300,
+            "inserted_per_minute": 1003294.1491229538,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 18.2213,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.537,
+                        "mean": 0.4466666666666667,
+                        "p50": 0.4194,
+                        "p95": 0.537,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 1.8244,
+                        "mean": 1.6597333333333333,
+                        "p50": 1.5695,
+                        "p95": 1.8244,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.5383,
+                        "mean": 0.44806666666666667,
+                        "p50": 0.4211,
+                        "p95": 0.5383,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 1.8255,
+                        "mean": 1.6610166666666668,
+                        "p50": 1.5705,
+                        "p95": 1.8255,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.586,
+                        "mean": 0.49720000000000003,
+                        "p50": 0.4729,
+                        "p95": 0.586,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 6.2216,
+                        "mean": 5.967133333333333,
+                        "p50": 6.0855,
+                        "p95": 6.2216,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 5.5871,
+                        "mean": 5.400133333333334,
+                        "p50": 5.5424,
+                        "p95": 5.5871,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 2,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 252.8224,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1186.6037186578405,
+            "inserted": 300,
+            "inserted_per_minute": 71196.22311947044,
+            "log_bytes": 75900,
+            "log_lines": 1200,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 253.336,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4068,
+                        "mean": 0.27549033333333334,
+                        "p50": 0.2688,
+                        "p95": 0.3255,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.4499,
+                        "mean": 0.2597006666666669,
+                        "p50": 0.2566,
+                        "p95": 0.3073,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.4072,
+                        "mean": 0.2760643333333333,
+                        "p50": 0.2693,
+                        "p95": 0.326,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.4507,
+                        "mean": 0.260341833333333,
+                        "p50": 0.2572,
+                        "p95": 0.308,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4087,
+                        "mean": 0.2775546666666667,
+                        "p50": 0.2708,
+                        "p95": 0.3272,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 5e-04,
+                        "mean": 0.00021633333333333305,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.833,
+                        "mean": 0.5578266666666664,
+                        "p50": 0.55,
+                        "p95": 0.6341,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.1142,
+                        "mean": 0.8418849999999998,
+                        "p50": 0.8341,
+                        "p95": 0.9387,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 2,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 179.9099,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1667.5013437281661,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 38700,
+            "log_lines": 600,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 180.3638,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.6721,
+                        "mean": 0.28833516666666675,
+                        "p50": 0.2889,
+                        "p95": 0.3625,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.6759,
+                        "mean": 0.288981333333333,
+                        "p50": 0.2895,
+                        "p95": 0.363,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.6911,
+                        "mean": 0.3362519999999999,
+                        "p50": 0.3292,
+                        "p95": 0.3968,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.0077,
+                        "mean": 0.5988306666666671,
+                        "p50": 0.5874,
+                        "p95": 0.7004,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 2,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 99.3363,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 604.0088064483981,
+            "inserted": 60,
+            "inserted_per_minute": 36240.52838690388,
+            "log_bytes": 15300,
+            "log_lines": 240,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 101.8488,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.5195,
+                        "mean": 0.32238666666666665,
+                        "p50": 0.3055,
+                        "p95": 0.4557,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 1.0196,
+                        "mean": 0.5220699999999998,
+                        "p50": 0.4055,
+                        "p95": 0.8773,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.5205,
+                        "mean": 0.32309333333333334,
+                        "p50": 0.306,
+                        "p95": 0.4565,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 1.0204,
+                        "mean": 0.5228199999999998,
+                        "p50": 0.4063,
+                        "p95": 0.8783,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.5233,
+                        "mean": 0.3248600000000001,
+                        "p50": 0.3076,
+                        "p95": 0.4589,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 0.001,
+                        "mean": 0.0002450000000000001,
+                        "p50": 2e-04,
+                        "p95": 4e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.6255,
+                        "mean": 1.320765,
+                        "p50": 1.3271,
+                        "p95": 1.5418,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 2.114,
+                        "mean": 1.6531749999999998,
+                        "p50": 1.6646,
+                        "p95": 1.9346,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 2,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 17.5616,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 17082.725947521867,
+            "inserted": 300,
+            "inserted_per_minute": 1024963.556851312,
+            "log_bytes": 720,
+            "log_lines": 9,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 22.0566,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.5765,
+                        "mean": 0.4465666666666667,
+                        "p50": 0.4191,
+                        "p95": 0.5765,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 1.8951,
+                        "mean": 1.6356833333333334,
+                        "p50": 1.5011,
+                        "p95": 1.8951,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.5804,
+                        "mean": 0.4485333333333334,
+                        "p50": 0.4203,
+                        "p95": 0.5804,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 1.896,
+                        "mean": 1.6368333333333334,
+                        "p50": 1.5019,
+                        "p95": 1.896,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.6508,
+                        "mean": 0.4979333333333334,
+                        "p50": 0.4609,
+                        "p95": 0.6508,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 5.975,
+                        "mean": 5.8153999999999995,
+                        "p50": 5.8656,
+                        "p95": 5.975,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 5.4551,
+                        "mean": 5.266566666666667,
+                        "p50": 5.1815,
+                        "p95": 5.4551,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 2,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 252.4169,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1188.509961100069,
+            "inserted": 300,
+            "inserted_per_minute": 71310.59766600413,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 252.9788,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 2,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 174.4722,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1719.4716407542292,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 174.855,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 2,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 95.2152,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 630.1514884178157,
+            "inserted": 60,
+            "inserted_per_minute": 37809.08930506894,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 95.6262,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 2,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 20.4657,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 14658.672803764348,
+            "inserted": 300,
+            "inserted_per_minute": 879520.3682258609,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 20.848,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 2,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 259.9435,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1154.0969479906212,
+            "inserted": 300,
+            "inserted_per_minute": 69245.81687943728,
+            "log_bytes": 75900,
+            "log_lines": 1200,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 260.4911,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4986,
+                        "mean": 0.29064300000000004,
+                        "p50": 0.283,
+                        "p95": 0.3528,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.5234,
+                        "mean": 0.2634776666666668,
+                        "p50": 0.2575,
+                        "p95": 0.3172,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.4991,
+                        "mean": 0.2912176666666667,
+                        "p50": 0.2836,
+                        "p95": 0.3535,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.5241,
+                        "mean": 0.2641303333333333,
+                        "p50": 0.2583,
+                        "p95": 0.318,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.5006,
+                        "mean": 0.2926886666666663,
+                        "p50": 0.2851,
+                        "p95": 0.3551,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 0.0013,
+                        "mean": 0.00022466666666666653,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.9095,
+                        "mean": 0.5666059999999999,
+                        "p50": 0.5544,
+                        "p95": 0.6497,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.2689,
+                        "mean": 0.8656973333333333,
+                        "p50": 0.8465,
+                        "p95": 0.9766,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 3,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 180.7086,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1660.131283181874,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 38700,
+            "log_lines": 600,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 181.1806,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.4639,
+                        "mean": 0.2894345000000002,
+                        "p50": 0.2934,
+                        "p95": 0.3661,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.4899,
+                        "mean": 0.2901793333333334,
+                        "p50": 0.2941,
+                        "p95": 0.3667,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.5018,
+                        "mean": 0.33790300000000006,
+                        "p50": 0.3314,
+                        "p95": 0.3954,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 0.775,
+                        "mean": 0.6014553333333332,
+                        "p50": 0.5923,
+                        "p95": 0.6827,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 3,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 97.2191,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 617.1626768813948,
+            "inserted": 60,
+            "inserted_per_minute": 37029.760612883685,
+            "log_bytes": 15300,
+            "log_lines": 240,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 99.2096,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.6013,
+                        "mean": 0.317725,
+                        "p50": 0.2953,
+                        "p95": 0.393,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 0.9185,
+                        "mean": 0.5098216666666667,
+                        "p50": 0.5063,
+                        "p95": 0.8473,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.6055,
+                        "mean": 0.318455,
+                        "p50": 0.296,
+                        "p95": 0.3934,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 0.9192,
+                        "mean": 0.51062,
+                        "p50": 0.5078,
+                        "p95": 0.8482,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.6096,
+                        "mean": 0.3202033333333334,
+                        "p50": 0.2976,
+                        "p95": 0.3964,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 6e-04,
+                        "mean": 0.00022833333333333345,
+                        "p50": 2e-04,
+                        "p95": 4e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.7033,
+                        "mean": 1.2905433333333334,
+                        "p50": 1.2626,
+                        "p95": 1.4842,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 2.1799,
+                        "mean": 1.617783333333333,
+                        "p50": 1.5695,
+                        "p95": 1.8872,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 3,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 18.302,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 16391.65118566277,
+            "inserted": 300,
+            "inserted_per_minute": 983499.0711397661,
+            "log_bytes": 720,
+            "log_lines": 9,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 22.3501,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.8102,
+                        "mean": 0.557,
+                        "p50": 0.4828,
+                        "p95": 0.8102,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 1.7911,
+                        "mean": 1.5853666666666666,
+                        "p50": 1.5133,
+                        "p95": 1.7911,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.8123,
+                        "mean": 0.5589333333333334,
+                        "p50": 0.4855,
+                        "p95": 0.8123,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 1.7923,
+                        "mean": 1.5865500000000001,
+                        "p50": 1.5149,
+                        "p95": 1.7923,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.8738,
+                        "mean": 0.6145333333333334,
+                        "p50": 0.5459,
+                        "p95": 0.8738,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 6.3582,
+                        "mean": 6.0488333333333335,
+                        "p50": 6.1905,
+                        "p95": 6.3582,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 5.7289,
+                        "mean": 5.3633999999999995,
+                        "p50": 5.2445,
+                        "p95": 5.7289,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "verbose",
+            "repeat": 3,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 274.9827,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1090.9777233258674,
+            "inserted": 300,
+            "inserted_per_minute": 65458.66339955204,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 275.5253,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 3,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 176.3967,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1700.7120881513088,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 176.769,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 3,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 98.2267,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 610.8318817592366,
+            "inserted": 60,
+            "inserted_per_minute": 36649.91290555419,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 98.7527,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 3,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 18.3225,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 16373.311502251328,
+            "inserted": 300,
+            "inserted_per_minute": 982398.6901350798,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                },
+                "elapsed_ms": 18.6773,
+                "enabled": false,
+                "gauges": {
+                },
+                "samples": {
+                },
+                "schema": 1
+            },
+            "mode": "metrics_off",
+            "repeat": 3,
+            "scenario": "new_batch"
+        },
+        {
+            "elapsed_ms": 256.6497,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1168.9084382331248,
+            "inserted": 300,
+            "inserted_per_minute": 70134.50629398749,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 300,
+                    "db.main_write_calls": 600,
+                    "db.query_calls": 300,
+                    "db.query_ok": 300,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 600,
+                    "db.write_ok": 600,
+                    "index.inserted": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 257.3427,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 300,
+                        "max": 0.4937,
+                        "mean": 0.2877876666666668,
+                        "p50": 0.2801,
+                        "p95": 0.3517,
+                        "retained": 300
+                    },
+                    "db.main_write_ms": {
+                        "count": 600,
+                        "max": 0.4809,
+                        "mean": 0.2602646666666665,
+                        "p50": 0.2533,
+                        "p95": 0.3225,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 300,
+                        "max": 0.4948,
+                        "mean": 0.2887610000000002,
+                        "p50": 0.2811,
+                        "p95": 0.3527,
+                        "retained": 300
+                    },
+                    "db.rows_per_statement": {
+                        "count": 600,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 600
+                    },
+                    "db.statement_bytes": {
+                        "count": 600,
+                        "max": 380,
+                        "mean": 325,
+                        "p50": 270,
+                        "p95": 380,
+                        "retained": 600
+                    },
+                    "db.write_ms": {
+                        "count": 600,
+                        "max": 0.4818,
+                        "mean": 0.26123983333333345,
+                        "p50": 0.2541,
+                        "p95": 0.3237,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4985,
+                        "mean": 0.2908339999999999,
+                        "p50": 0.2831,
+                        "p95": 0.3548,
+                        "retained": 300
+                    },
+                    "index.filter_ms": {
+                        "count": 300,
+                        "max": 5e-04,
+                        "mean": 0.00021533333333333316,
+                        "p50": 2e-04,
+                        "p95": 3e-04,
+                        "retained": 300
+                    },
+                    "index.persist_ms": {
+                        "count": 300,
+                        "max": 0.7852,
+                        "mean": 0.5624916666666667,
+                        "p50": 0.5502,
+                        "p95": 0.6654,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 1.1529,
+                        "mean": 0.8548573333333337,
+                        "p50": 0.8356,
+                        "p95": 0.9998,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 3,
+            "scenario": "new_single"
+        },
+        {
+            "elapsed_ms": 179.4283,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 1671.9770515576415,
+            "inserted": 0,
+            "inserted_per_minute": 0,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 300,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 600,
+                    "db.query_calls": 600,
+                    "db.query_ok": 600,
+                    "db.rows_returned": 600,
+                    "index.merged": 300,
+                    "index.single_attempts": 300
+                },
+                "elapsed_ms": 179.9019,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 600,
+                        "max": 0.4556,
+                        "mean": 0.2865570000000001,
+                        "p50": 0.288,
+                        "p95": 0.3646,
+                        "retained": 600
+                    },
+                    "db.query_ms": {
+                        "count": 600,
+                        "max": 0.4567,
+                        "mean": 0.2875060000000002,
+                        "p50": 0.289,
+                        "p95": 0.3655,
+                        "retained": 600
+                    },
+                    "index.dedupe_ms": {
+                        "count": 300,
+                        "max": 0.4794,
+                        "mean": 0.3362010000000002,
+                        "p50": 0.329,
+                        "p95": 0.3963,
+                        "retained": 300
+                    },
+                    "index.single_ms": {
+                        "count": 300,
+                        "max": 0.7697,
+                        "mean": 0.5972833333333339,
+                        "p50": 0.5886,
+                        "p95": 0.6903,
+                        "retained": 300
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 3,
+            "scenario": "duplicate_single"
+        },
+        {
+            "elapsed_ms": 99.3553,
+            "files_per_torrent": 256,
+            "inputs": 60,
+            "inputs_per_second": 603.893300105782,
+            "inserted": 60,
+            "inserted_per_minute": 36233.59800634692,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 60,
+                    "db.main_write_calls": 120,
+                    "db.query_calls": 60,
+                    "db.query_ok": 60,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 120,
+                    "db.write_ok": 120,
+                    "index.inserted": 60,
+                    "index.single_attempts": 60
+                },
+                "elapsed_ms": 100.1359,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 60,
+                        "max": 0.8362,
+                        "mean": 0.33488166666666674,
+                        "p50": 0.2999,
+                        "p95": 0.4247,
+                        "retained": 60
+                    },
+                    "db.main_write_ms": {
+                        "count": 120,
+                        "max": 1.0204,
+                        "mean": 0.5148258333333332,
+                        "p50": 0.4569,
+                        "p95": 0.9093,
+                        "retained": 120
+                    },
+                    "db.query_ms": {
+                        "count": 60,
+                        "max": 0.8438,
+                        "mean": 0.3360016666666667,
+                        "p50": 0.301,
+                        "p95": 0.4257,
+                        "retained": 60
+                    },
+                    "db.rows_per_statement": {
+                        "count": 120,
+                        "max": 1,
+                        "mean": 1,
+                        "p50": 1,
+                        "p95": 1,
+                        "retained": 120
+                    },
+                    "db.statement_bytes": {
+                        "count": 120,
+                        "max": 10500,
+                        "mean": 5442,
+                        "p50": 384,
+                        "p95": 10500,
+                        "retained": 120
+                    },
+                    "db.write_ms": {
+                        "count": 120,
+                        "max": 1.0215,
+                        "mean": 0.5159075,
+                        "p50": 0.458,
+                        "p95": 0.9102,
+                        "retained": 120
+                    },
+                    "index.dedupe_ms": {
+                        "count": 60,
+                        "max": 0.8512,
+                        "mean": 0.33850333333333343,
+                        "p50": 0.3034,
+                        "p95": 0.4276,
+                        "retained": 60
+                    },
+                    "index.filter_ms": {
+                        "count": 60,
+                        "max": 0.001,
+                        "mean": 0.00026833333333333337,
+                        "p50": 2e-04,
+                        "p95": 5e-04,
+                        "retained": 60
+                    },
+                    "index.persist_ms": {
+                        "count": 60,
+                        "max": 1.7475,
+                        "mean": 1.314455,
+                        "p50": 1.2717,
+                        "p95": 1.5472,
+                        "retained": 60
+                    },
+                    "index.single_ms": {
+                        "count": 60,
+                        "max": 2.3844,
+                        "mean": 1.6549750000000005,
+                        "p50": 1.6147,
+                        "p95": 1.9505,
+                        "retained": 60
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 3,
+            "scenario": "large_single"
+        },
+        {
+            "elapsed_ms": 17.5971,
+            "files_per_torrent": 4,
+            "inputs": 300,
+            "inputs_per_second": 17048.26363434884,
+            "inserted": 300,
+            "inserted_per_minute": 1022895.8180609305,
+            "log_bytes": 0,
+            "log_lines": 0,
+            "merged": 0,
+            "metrics": {
+                "counters": {
+                    "db.main_query_calls": 3,
+                    "db.main_write_calls": 6,
+                    "db.query_calls": 3,
+                    "db.query_ok": 3,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 6,
+                    "db.write_ok": 6,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0,
+                    "index.batch_unconfirmed": 0
+                },
+                "elapsed_ms": 18.1157,
+                "enabled": true,
+                "gauges": {
+                },
+                "samples": {
+                    "db.main_query_ms": {
+                        "count": 3,
+                        "max": 0.51,
+                        "mean": 0.4384666666666666,
+                        "p50": 0.4112,
+                        "p95": 0.51,
+                        "retained": 3
+                    },
+                    "db.main_write_ms": {
+                        "count": 6,
+                        "max": 1.7608,
+                        "mean": 1.5753666666666668,
+                        "p50": 1.5329,
+                        "p95": 1.7608,
+                        "retained": 6
+                    },
+                    "db.query_ms": {
+                        "count": 3,
+                        "max": 0.5122,
+                        "mean": 0.4401333333333333,
+                        "p50": 0.413,
+                        "p95": 0.5122,
+                        "retained": 3
+                    },
+                    "db.rows_per_statement": {
+                        "count": 6,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 6
+                    },
+                    "db.statement_bytes": {
+                        "count": 6,
+                        "max": 22248,
+                        "mean": 21071.5,
+                        "p50": 19895,
+                        "p95": 22248,
+                        "retained": 6
+                    },
+                    "db.write_ms": {
+                        "count": 6,
+                        "max": 1.762,
+                        "mean": 1.5767333333333333,
+                        "p50": 1.5345,
+                        "p95": 1.762,
+                        "retained": 6
+                    },
+                    "index.batch_dedupe_ms": {
+                        "count": 3,
+                        "max": 0.5747,
+                        "mean": 0.49429999999999996,
+                        "p50": 0.4637,
+                        "p95": 0.5747,
+                        "retained": 3
+                    },
+                    "index.batch_ms": {
+                        "count": 3,
+                        "max": 6.1505,
+                        "mean": 5.8477,
+                        "p50": 5.798,
+                        "p95": 6.1505,
+                        "retained": 3
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 3,
+                        "max": 5.6139,
+                        "mean": 5.290933333333334,
+                        "p50": 5.3051,
+                        "p95": 5.6139,
+                        "retained": 3
+                    },
+                    "index.batch_size": {
+                        "count": 3,
+                        "max": 100,
+                        "mean": 100,
+                        "p50": 100,
+                        "p95": 100,
+                        "retained": 3
+                    }
+                },
+                "schema": 1
+            },
+            "mode": "metrics_on",
+            "repeat": 3,
+            "scenario": "new_batch"
+        }
+    ],
+    "schema": 1,
+    "source": "fa5abc8",
+    "utc": "2026-11-20T07:46:07Z",
+    "warmup_per_instance": 12
+}

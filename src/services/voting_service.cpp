@@ -80,12 +80,12 @@ void VotingService::vote(const QString& hash, bool isGood, ResultCallback callba
     }
 
     // Mirror the vote onto the local torrent counts for fast local access.
-    if (isGood) {
-        torrent.good++;
-    } else {
-        torrent.bad++;
+    const auto updated = repository_->incrementVote(hash, isGood);
+    if (!updated) {
+        if (callback) callback(false, QJsonObject(), QStringLiteral("Vote persistence failed"));
+        return;
     }
-    repository_->update(torrent);
+    torrent = *updated;
     selfVotedHashes_.insert(hash);
 
     // Prefer the distributed aggregate for the returned counts.
@@ -258,7 +258,7 @@ void VotingService::onRecordStored(const StoredRecord& record, bool isRemote)
     if (torrent && (torrent->good != votes.good || torrent->bad != votes.bad)) {
         torrent->good = votes.good;
         torrent->bad = votes.bad;
-        repository_->update(*torrent);
+        repository_->updateVotes(hash, votes.good, votes.bad);
     }
     emit votesUpdated(hash, votes.good, votes.bad);
 }

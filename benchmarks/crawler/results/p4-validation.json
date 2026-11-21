@@ -1,0 +1,107 @@
+{
+  "phase": "P4",
+  "utc": "2026-11-21T04:06:00.146Z",
+  "branch": "feat/crawler-p0-observability",
+  "baseRevision": "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+  "sourceModified": true,
+  "platform": "Windows x64",
+  "qt": "6.10.1",
+  "compiler": "MinGW GCC 13.1",
+  "fullSuite": {
+    "passed": 31,
+    "failed": 0,
+    "wallSeconds": 127.19,
+    "log": "build-windows-x64/p4-full-tests.log"
+  },
+  "controlled": {
+    "runs": 9,
+    "candidatesPerRun": 300,
+    "allInsertedAndNotified": true,
+    "actualConcurrencyPeaks": [
+      {
+        "configured": 10,
+        "actual": {
+          "min": 10,
+          "max": 10
+        }
+      },
+      {
+        "configured": 20,
+        "actual": {
+          "min": 13,
+          "max": 13
+        }
+      },
+      {
+        "configured": 40,
+        "actual": {
+          "min": 13,
+          "max": 13
+        }
+      }
+    ]
+  },
+  "live": {
+    "runs": 12,
+    "secondsPerRun": 10,
+    "announcements": 0,
+    "attempts": 0,
+    "throughputConclusion": "insufficient input"
+  },
+  "watcherProfile": [
+    {
+      "requests": 10,
+      "baselineThreads": 30,
+      "peakThreads": 40,
+      "finalThreads": 30,
+      "callbacks": 10
+    },
+    {
+      "requests": 20,
+      "baselineThreads": 30,
+      "peakThreads": 50,
+      "finalThreads": 30,
+      "callbacks": 20
+    },
+    {
+      "requests": 40,
+      "baselineThreads": 30,
+      "peakThreads": 70,
+      "finalThreads": 30,
+      "callbacks": 40
+    }
+  ],
+  "defaultConcurrency": 10,
+  "tested64": false,
+  "reactorRefactor": false,
+  "networkBandwidthMeasured": false,
+  "resourcesScope": "Probe process only; no searchd, system memory, or wire bandwidth; CPU percent is percent of one logical core",
+  "measurementBinaryManifest": "p4/measurement-binaries.json",
+  "sha256": {
+    "src/common/crawler_limits.h": "76535b67b9989e89a7204ae2bce4bf8cf27065aad1180b51c36bb6091c4719a9",
+    "src/app/config_store.h": "23ede0c8b1bbfb9a2f810b5cc912f02b81a41e5a7993979292243a5eff5a90cf",
+    "src/app/config_store.cpp": "7d7a5b20c1ac327e990265c09e9b5c045803ea2d972b9d23906dadccc19c0b5e",
+    "src/app/application.cpp": "a1be07689eefdf7f4772b485b320daae15bdc949a4061f5ab87a0e59f4e51828",
+    "src/net/crawler.h": "6698327114880bb769587771fc014e5b85e2acb7dae7ff0e88789f601c2ff9cf",
+    "src/net/crawler.cpp": "ebd2e7f98ac148731e49c4e76733811c980eab423c4a160270da44160e736280",
+    "src/services/crawler_pipeline.h": "6d7834510c26cc37f8763e9b9603cd5dae9d75901b1ac0891e625e218cb6e4ed",
+    "src/services/crawler_pipeline.cpp": "2eab969a66e5b27a1b8e7c9b57bbc714f264039a1231907b52c305c36be7509d",
+    "src/ui/settingsdialog.h": "bfe4166316cd109787b8b0fc64bdfa062b00fbd6da64664898cdfc64cc2311eb",
+    "src/ui/settingsdialog.cpp": "decdb2512ee16f210ca25caaadce5a0afd2a9cd5a35f1877fe11fbed7262e13e",
+    "src/ui/mainwindow.cpp": "de70b5bc2e423215bb0a38e33a9c86b8d8cf813732b4be4adebfad17a2a83343",
+    "src/rest/api_router.cpp": "5aa8b2d92f9ae74ba6e11cb264d47efe9d7b2eaede2ba26c7329d7ee3710a532",
+    "translations/ratssearch_zh.ts": "fd0883c867992db5e9a53477d5ae61ccdd7075afc225f086cc7c500054af3e5a",
+    "tests/test_config_store.cpp": "61990fb7c7304fb19879a5be6b80e8a88f0a132b5cc9284695875cd775a56bd1",
+    "tests/test_crawler_metrics.cpp": "0fe8c5af1dda2515d8572c6fa406673196e8fd4a1594f835a29a2c84a0ef2fc9",
+    "tests/test_crawler_pipeline.cpp": "1de39bcc11d09349ec375a8e96a9e9b8c55c023da40f8a5210f23e42916c1f57",
+    "benchmarks/crawler/crawler_concurrency_probe.cpp": "204264fd4d44b422b0fe34a8acc084c628ede140b5c83ed795721adfddd02168",
+    "benchmarks/crawler/crawler_live_probe.cpp": "27356f3ee5c0520f382d297dc852a6529702157a493b072d2a57ec3800863b61",
+    "benchmarks/crawler/process_resources.h": "569c6d4f9a819b4eaabf10a2ee6129c0be2c1f05edca8110b6a6576126901cc8",
+    "benchmarks/crawler/run-concurrency.ps1": "ee6124cb78c75e42a1a3c0e6c99a4b7ed803765bb72ee255cb4f272e6c2086cc",
+    "benchmarks/crawler/summarize-concurrency.cjs": "07e3221bea13850957f6f56103bdf19132a5db9ada5b6ba06f7fafbea3e72c58",
+    "build-windows-x64/bin/RatsSearch.exe": "3f9f150ec36db8b5afa3b579c254ba4ac2dcb51edd8bcfaf2ddaf1f7680170c2",
+    "build-windows-x64/tests/crawler_concurrency_probe.exe": "a913671183d0b687aa9b1cf63a96d2eca20f853cfe058236a2c3da0c3f00a116",
+    "build-windows-x64/tests/crawler_live_probe.exe": "252e8efbe9bd2b978c83b43915cb49fac2c2755006688deb3b1c68d24c74ef54",
+    "build-windows-x64/tests/crawler_live_probe_p3_baseline.exe": "78f0c7c46100504263aaf83d4d2b5e0de9a32d424672eea90cf5a0238bcc5de9"
+  }
+}

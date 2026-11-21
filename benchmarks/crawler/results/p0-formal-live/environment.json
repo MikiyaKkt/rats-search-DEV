@@ -1,0 +1,28 @@
+﻿{
+    "branch":  "feat/crawler-p0-observability",
+    "head":  "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+    "os":  "Microsoft Windows NT 10.0.26320.0",
+    "logical_processors":  16,
+    "powershell":  "5.1.26100.9836",
+    "warmup_seconds":  300,
+    "measurement_seconds":  900,
+    "runs":  3,
+    "modes":  "sequential; isolated fresh database per run; peer ingestion disabled; trackers off",
+    "binaries":  [
+                     {
+                         "path":  "build-windows-x64/tests/crawler_live_probe.exe",
+                         "sha256":  "2139eae1f18978fbace1e63795d0ee889505f71037010d0a2aa878ba845cdad3"
+                     },
+                     {
+                         "path":  "imports/win/x64/searchd.exe",
+                         "sha256":  "a37301e616b00a96b0d46d037b843362c8fba433e4550acc3fc0f735a2c8527a"
+                     },
+                     {
+                         "path":  ".tools/Qt/6.10.1/mingw_64/bin/libmysql.dll",
+                         "sha256":  "bb261237d96bda186d5553592fa762dc96e3c75463ddfcf57e0f97a5a07e0ff3"
+                     }
+                 ],
+    "captured_utc":  "2026-11-20T07:56:52.7026249Z",
+    "verified_after_runs_utc":  "2026-11-20T08:55:35.3845465Z",
+    "analyzer_sha256":  "850425104a1de24ef7c2075bbd689c2bdfba8a0f95c016ea63b3b3d806c567b7"
+}

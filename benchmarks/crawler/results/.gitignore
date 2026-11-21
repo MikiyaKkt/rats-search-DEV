@@ -1,0 +1,5 @@
+# Exploratory/failed probes; keep the selected baseline JSON and report only.
+/smoke/
+/live-smoke/
+/live/
+*.resources.jsonl

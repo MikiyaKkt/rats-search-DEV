@@ -62,10 +62,33 @@ add_rats_test(test_query)
 add_rats_test(test_infohash)
 add_rats_test(test_utf8_download_paths)
 add_rats_test(test_download_metrics)
+add_rats_test(test_performance_metrics)
+add_rats_test(test_crawler_metrics)
+add_rats_test(test_crawler_pipeline)
+add_rats_test(test_crawler_batch_indexing)
+set_tests_properties(test_crawler_batch_indexing PROPERTIES RESOURCE_LOCK manticore_local)
+
+# Controlled P0 baseline: real temporary Manticore, no DHT or user database.
+add_executable(crawler_benchmark ../benchmarks/crawler/crawler_benchmark.cpp)
+target_link_libraries(crawler_benchmark PRIVATE ratscore)
+add_executable(crawler_batch_benchmark ../benchmarks/crawler/crawler_batch_benchmark.cpp)
+target_link_libraries(crawler_batch_benchmark PRIVATE ratscore)
+add_executable(crawler_live_probe ../benchmarks/crawler/crawler_live_probe.cpp)
+target_link_libraries(crawler_live_probe PRIVATE ratscore)
+add_executable(crawler_concurrency_probe ../benchmarks/crawler/crawler_concurrency_probe.cpp)
+target_link_libraries(crawler_concurrency_probe PRIVATE ratscore)
+add_executable(crawler_soak_probe ../benchmarks/crawler/crawler_soak_probe.cpp)
+target_link_libraries(crawler_soak_probe PRIVATE ratscore)
+if(WIN32)
+    target_link_libraries(crawler_concurrency_probe PRIVATE psapi)
+    target_link_libraries(crawler_soak_probe PRIVATE psapi)
+    target_link_libraries(crawler_live_probe PRIVATE psapi)
+endif()
 add_rats_test(test_download_policy)
 add_rats_test(test_download_s1)
 add_rats_test(test_download_s3)
 add_rats_test(test_download_ui
+    ${CMAKE_SOURCE_DIR}/src/ui/torrentfileswidget.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/taskdownloaddialog.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/downloadadvancedwidgets.cpp)
 target_link_libraries(test_download_ui PRIVATE Qt6::Widgets)
@@ -111,6 +134,7 @@ add_rats_test(test_content_classifier ${CMAKE_SOURCE_DIR}/resources/resources.qr
 # Integration test: starts a real Manticore instance and drives the new
 # data layer (Manticore + Database + TorrentRepository).
 add_rats_test(test_manticore_queries)
+set_tests_properties(test_manticore_queries PROPERTIES RESOURCE_LOCK manticore_local)
 
 # Copy libmysql.dll next to test executables so the QMYSQL driver can load.
 #
@@ -167,7 +191,7 @@ endif()
 # Custom target to run all tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_domain test_query test_infohash test_utf8_download_paths test_download_metrics test_download_policy test_download_s1 test_download_s3 test_download_ui test_download_creation test_download_errors test_update_service
+    DEPENDS test_domain test_query test_infohash test_utf8_download_paths test_download_metrics test_performance_metrics test_crawler_metrics test_download_policy test_download_s1 test_download_s3 test_download_ui test_download_creation test_download_errors test_update_service
             test_config_store test_filter_policy test_content_classifier test_manticore_queries
             test_manticore_maintenance
             test_database_dump

@@ -1,0 +1,424 @@
+{
+    "crawler_running": false,
+    "dht_nodes_at_end": 0,
+    "end_snapshot": {
+        "counters": {
+            "db.main_query_calls": 2,
+            "db.query_calls": 2,
+            "db.query_ok": 2,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 3308.9426,
+        "enabled": true,
+        "gauges": {
+            "crawler.db_batch_limit": {
+                "current": 100,
+                "peak": 100
+            },
+            "crawler.db_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_limit": {
+                "current": 1000,
+                "peak": 1000
+            },
+            "crawler.db_retry_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_state": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_paused": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.notification_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.result_reservations": {
+                "current": 0,
+                "peak": 0
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 2,
+                "max": 11.1918,
+                "mean": 5.74685,
+                "p50": 0.3019,
+                "p95": 11.1918,
+                "retained": 2
+            },
+            "db.query_ms": {
+                "count": 2,
+                "max": 11.2009,
+                "mean": 5.751950000000001,
+                "p50": 0.303,
+                "p95": 11.2009,
+                "retained": 2
+            },
+            "main.event_loop_drift_ms": {
+                "count": 15,
+                "max": 22.9872,
+                "mean": 6.53196,
+                "p50": 0.7546000000000106,
+                "p95": 22.9872,
+                "retained": 15
+            }
+        },
+        "schema": 1
+    },
+    "isolated_database": true,
+    "measurement_end_utc": "2026-11-21T03:59:11.964Z",
+    "measurement_seconds": 3,
+    "measurement_start_utc": "2026-11-21T03:59:08.977Z",
+    "metadata_concurrency": 10,
+    "network_bandwidth": null,
+    "peer_ingestion_disabled": true,
+    "profile_waiters": 40,
+    "replication": false,
+    "resources": [
+        {
+            "cpu_seconds": 0.078125,
+            "elapsed_ms": 45,
+            "peak_working_set_bytes": 25104384,
+            "private_bytes": 11337728,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25104384
+        },
+        {
+            "cpu_seconds": 0.171875,
+            "elapsed_ms": 189,
+            "peak_working_set_bytes": 26959872,
+            "private_bytes": 13545472,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26959872
+        },
+        {
+            "cpu_seconds": 0.21875,
+            "elapsed_ms": 296,
+            "peak_working_set_bytes": 27967488,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26996736
+        },
+        {
+            "cpu_seconds": 0.25,
+            "elapsed_ms": 413,
+            "peak_working_set_bytes": 28004352,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26996736
+        },
+        {
+            "cpu_seconds": 0.296875,
+            "elapsed_ms": 521,
+            "peak_working_set_bytes": 28004352,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26996736
+        },
+        {
+            "cpu_seconds": 0.34375,
+            "elapsed_ms": 630,
+            "peak_working_set_bytes": 28004352,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26996736
+        },
+        {
+            "cpu_seconds": 0.390625,
+            "elapsed_ms": 739,
+            "peak_working_set_bytes": 28004352,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 26996736
+        },
+        {
+            "cpu_seconds": 0.4375,
+            "elapsed_ms": 850,
+            "peak_working_set_bytes": 28004352,
+            "private_bytes": 13582336,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27025408
+        },
+        {
+            "cpu_seconds": 0.484375,
+            "elapsed_ms": 957,
+            "peak_working_set_bytes": 28033024,
+            "private_bytes": 13619200,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27062272
+        },
+        {
+            "cpu_seconds": 0.53125,
+            "elapsed_ms": 1068,
+            "peak_working_set_bytes": 28069888,
+            "private_bytes": 13660160,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27123712
+        },
+        {
+            "cpu_seconds": 0.59375,
+            "elapsed_ms": 1178,
+            "peak_working_set_bytes": 28131328,
+            "private_bytes": 13742080,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27242496
+        },
+        {
+            "cpu_seconds": 0.640625,
+            "elapsed_ms": 1284,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 13742080,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27242496
+        },
+        {
+            "cpu_seconds": 0.6875,
+            "elapsed_ms": 1402,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 13742080,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27242496
+        },
+        {
+            "cpu_seconds": 0.734375,
+            "elapsed_ms": 1512,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 13742080,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 70,
+            "working_set_bytes": 27242496
+        },
+        {
+            "cpu_seconds": 0.78125,
+            "elapsed_ms": 1610,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 12267520,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 26394624
+        },
+        {
+            "cpu_seconds": 0.828125,
+            "elapsed_ms": 1721,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11948032,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 26075136
+        },
+        {
+            "cpu_seconds": 0.875,
+            "elapsed_ms": 1828,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11948032,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 26075136
+        },
+        {
+            "cpu_seconds": 0.921875,
+            "elapsed_ms": 1937,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11948032,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 26091520
+        },
+        {
+            "cpu_seconds": 0.953125,
+            "elapsed_ms": 2047,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11886592,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25980928
+        },
+        {
+            "cpu_seconds": 1,
+            "elapsed_ms": 2160,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11886592,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25980928
+        },
+        {
+            "cpu_seconds": 1.046875,
+            "elapsed_ms": 2266,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11886592,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25980928
+        },
+        {
+            "cpu_seconds": 1.09375,
+            "elapsed_ms": 2380,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11886592,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25980928
+        },
+        {
+            "cpu_seconds": 1.140625,
+            "elapsed_ms": 2483,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.171875,
+            "elapsed_ms": 2594,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.21875,
+            "elapsed_ms": 2708,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.265625,
+            "elapsed_ms": 2812,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.296875,
+            "elapsed_ms": 2924,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.34375,
+            "elapsed_ms": 3035,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25985024
+        },
+        {
+            "cpu_seconds": 1.390625,
+            "elapsed_ms": 3079,
+            "peak_working_set_bytes": 28250112,
+            "private_bytes": 11890688,
+            "scope": "probe process; excludes searchd and operating system",
+            "threads": 30,
+            "working_set_bytes": 25989120
+        }
+    ],
+    "schema": 1,
+    "source": "fa5abc8",
+    "start_snapshot": {
+        "counters": {
+            "db.main_query_calls": 2,
+            "db.query_calls": 2,
+            "db.query_ok": 2,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 321.7724,
+        "enabled": true,
+        "gauges": {
+            "crawler.db_batch_limit": {
+                "current": 100,
+                "peak": 100
+            },
+            "crawler.db_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_limit": {
+                "current": 1000,
+                "peak": 1000
+            },
+            "crawler.db_retry_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_state": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_paused": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.notification_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.result_reservations": {
+                "current": 0,
+                "peak": 0
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 2,
+                "max": 11.1918,
+                "mean": 5.74685,
+                "p50": 0.3019,
+                "p95": 11.1918,
+                "retained": 2
+            },
+            "db.query_ms": {
+                "count": 2,
+                "max": 11.2009,
+                "mean": 5.751950000000001,
+                "p50": 0.303,
+                "p95": 11.2009,
+                "retained": 2
+            }
+        },
+        "schema": 1
+    },
+    "trackers": false,
+    "utc": "2026-11-21T03:59:12Z",
+    "waiter_completions": 40,
+    "warmup_seconds": 0
+}

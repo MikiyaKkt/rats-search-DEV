@@ -786,6 +786,20 @@ GET http://localhost:8095/api/config.get
 
 Returns the full configuration object (all `ConfigStore` settings).
 
+Crawler settings are nested under `spider`: `metadataConcurrency` (1–64, default 10),
+`pendingLimit` (1–1,000, default 1,000), and `batchSize` (1–100, default 100).
+They also accept dotted keys through `config.set`, for example
+`/api/config.set?spider.metadataConcurrency=20&spider.pendingLimit=500&spider.batchSize=50`.
+Integer values outside the range are clamped; malformed or fractional values use
+the field's default. Older configuration files inherit these defaults.
+
+Changes apply while running. Reducing a limit leaves admitted requests/tasks in
+place and gates new admission until the count falls. Metadata result reservations
+and the fixed estimated 64 MiB budget also constrain actual concurrency.
+`stats.get` adds a `crawler` object with `running`, `metadataConcurrency`,
+`activeMetadata`, and `waitingForCapacity`, so clients can distinguish the configured
+limit from the current number of requests. Database batch wait remains 100 ms.
+
 ---
 
 #### `config.set` - Update configuration

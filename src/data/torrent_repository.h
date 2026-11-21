@@ -2,6 +2,7 @@
 #define RATS_DATA_TORRENT_REPOSITORY_H
 
 #include "domain/torrent.h"
+#include "domain/hash_state.h"
 
 #include <QHash>
 #include <QMutex>
@@ -10,6 +11,9 @@
 #include <QStringList>
 #include <QVector>
 #include <optional>
+#include <mutex>
+#include <functional>
+#include <atomic>
 
 namespace rats::data {
 
@@ -23,6 +27,19 @@ class TorrentRepository : public QObject {
     Q_OBJECT
 
 public:
+    // Serializes complete read/merge/write operations across every producer.
+    // Notifications are dispatched only after the outermost guard releases.
+    class WriteGuard {
+    public:
+        explicit WriteGuard(TorrentRepository* repository);
+        ~WriteGuard();
+        void unlock();
+        WriteGuard(const WriteGuard&) = delete;
+        WriteGuard& operator=(const WriteGuard&) = delete;
+    private:
+        TorrentRepository* repository_;
+        std::unique_lock<std::recursive_mutex> lock_;
+    };
     struct SearchQuery {
         QString text;
         int offset = 0;
@@ -42,9 +59,11 @@ public:
         qint64 torrents = 0;
         qint64 files = 0;
         qint64 totalSize = 0;
+        bool exact = true;
     };
 
     explicit TorrentRepository(Database* db, QObject* parent = nullptr);
+    void closeCurrentThreadConnection();
 
     // Load statistics from the existing tables. Call once after the database is
     // up. There are no id counters to restore: a row id is derived from the
@@ -56,6 +75,7 @@ public:
         qint64 id = 0; // 0 when the hash is not a usable infohash
         bool taken = false; // some row already occupies this id
         bool ours = false; // ... and it carries this very hash
+        bool failed = false; // lookup failed; never interpret it as an empty slot
         // The stored row, when it is ours and resolve() was asked for it.
         std::optional<domain::Torrent> stored;
         // taken && !ours is a 63-bit id collision: writing would overwrite an
@@ -75,11 +95,17 @@ public:
     // success. Use update() to rewrite one. Refuses a torrent whose row id
     // belongs to a different hash.
     bool add(const domain::Torrent& torrent);
-    // Same, reusing a slot the caller has already resolved. The slot must belong
+    // Same, checking a slot the caller has already resolved. It is rechecked
+    // inside the write boundary to prevent a stale empty slot overwriting a row.
+    // The slot must belong
     // to this torrent's hash; one that does not is refused rather than trusted,
     // so a stale or mismatched slot cannot turn into an overwrite.
     bool add(const domain::Torrent& torrent, const RowSlot& slot);
+    // Full-row maintenance API: hold WriteGuard across get/modify/update.
+    // Production partial writers use the field-specific methods below.
     bool update(const domain::Torrent& torrent);
+    bool updateVotes(const QString& hash, int good, int bad, bool keepMaximum = false);
+    std::optional<domain::Torrent> incrementVote(const QString& hash, bool good);
     bool remove(const QString& hash);
     bool exists(const QString& hash);
     std::optional<domain::Torrent> get(const QString& hash, bool includeFiles = false);
@@ -93,19 +119,29 @@ public:
     // is dropped rather than reported as a hit. Pass `collided` to learn which of
     // the requested hashes lost such a race: they cannot be stored (their slot
     // belongs to another torrent) and must not be written.
-    QHash<QString, domain::Torrent> getMany(const QStringList& hashes, QSet<QString>* collided = nullptr);
-    // Insert torrents already known to be absent, in as few statements as the
+    QHash<QString, domain::Torrent> getMany(const QStringList& hashes, QSet<QString>* collided = nullptr, bool* ok = nullptr);
+    // Insert absent torrents, rechecking identities under the write guard, in as few statements as the
     // packet limit allows. Statistics move once for the whole batch instead of
     // once per row, so a million-row import does not emit a million signals.
     //
-    // Rows sharing a derived id are collapsed to the first: the batch write reports
-    // no per-row outcome, so a second row under one id would be dropped by Manticore
-    // while still counting towards the statistics here. Callers must still dedupe
-    // against the *index* (see getMany's `collided`) — this only guards the batch
-    // against itself, which is the one collision no prior lookup can see.
+    // Checks existing identities and in-batch collisions. SQL sub-batches are
+    // confirmed separately; ambiguous writes are re-read before counting.
     //
     // Returns the number of rows written, which is what the statistics moved by.
     int addMany(const QVector<domain::Torrent>& torrents);
+    enum class PersistStatus { Inserted, Existing, Collision, Failed, Invalid, Duplicate };
+    struct PersistItem {
+        QString hash;
+        PersistStatus status = PersistStatus::Failed;
+        QString stage;
+        QString error;
+        domain::Torrent torrent;
+        bool retryable = true;
+    };
+    QVector<PersistItem> addManyConfirmed(const QVector<domain::Torrent>& torrents);
+    QHash<QString, domain::HashState> checkMany(const QStringList& hashes);
+    bool reconcileStatistics();
+    bool takeConfirmedInsert(const QString& hash);
 
     // Search -------------------------------------------------------------------
     QVector<domain::SearchHit> searchTorrents(const SearchQuery& query);
@@ -123,7 +159,7 @@ public:
 
     // Files --------------------------------------------------------------------
     QVector<domain::File> filesOf(const QString& hash);
-    QHash<QString, QVector<domain::File>> filesOf(const QStringList& hashes);
+    QHash<QString, QVector<domain::File>> filesOf(const QStringList& hashes, bool* ok = nullptr);
 
     // Partial updates ----------------------------------------------------------
     bool updateTrackerCounts(const QString& hash, int seeders, int leechers, int completed);
@@ -183,9 +219,13 @@ signals:
     void statisticsChanged(qint64 torrents, qint64 files, qint64 totalSize);
 
 private:
+    void notify(std::function<void()> notification);
+    std::recursive_mutex writeMutex_;
+    int writeDepth_ = 0; // protected by writeMutex_
+    QVector<std::function<void()>> notifications_;
     domain::Torrent rowToTorrent(const QVariantMap& row) const;
     QString buildNameIndex(const domain::Torrent& torrent) const;
-    void saveFiles(const QString& hash, const QVector<domain::File>& files);
+    bool saveFiles(const QString& hash, const QVector<domain::File>& files);
     // Column map for one torrents row, id included. Shared by add() and addMany().
     QVariantMap torrentRow(const domain::Torrent& torrent);
     // Column map for one files row (the "\n"-joined path/size blobs).
@@ -205,6 +245,8 @@ private:
     Database* db_;
     mutable QMutex statsMutex_; // guards stats_
     Statistics stats_;
+    std::atomic<bool> statisticsDirty_ {false};
+    QSet<QString> unconfirmedInserts_;
 };
 
 } // namespace rats::data

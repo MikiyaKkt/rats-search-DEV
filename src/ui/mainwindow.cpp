@@ -75,6 +75,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QProgressBar>
+#include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QResizeEvent>
@@ -680,6 +681,7 @@ void MainWindow::connectServiceSignals()
     // Crawler status text.
     if (app_->crawler()) {
         connect(app_->crawler(), &rats::net::Crawler::statusChanged, this, &MainWindow::refreshSpiderStatus);
+        connect(app_->crawler(), &rats::net::Crawler::metadataActivityChanged, this, &MainWindow::refreshSpiderStatus);
     }
 
     // New torrents indexed (from any source) update the status message.
@@ -843,24 +845,6 @@ void MainWindow::connectPeerSignals()
             }
         });
 
-    // A single-torrent reply from a peer: populate the bottom files panel if it
-    // matches the torrent currently on screen.
-    connect(peerApi, &rats::peer::PeerApi::remoteTorrentReceived, this,
-        [this](const QString& hash, const QJsonObject& data) {
-            if (!filesWidget || hash.isEmpty())
-                return;
-            if (detailsPanel && detailsPanel->currentHash() != hash)
-                return;
-            // Parse through the shared codec so the file list is read from the
-            // canonical "files_list" key (with legacy "filesList" fallback), not
-            // the "files" count.
-            const rats::domain::Torrent t = codec::torrentFromJson(data);
-            if (!t.fileList.isEmpty()) {
-                filesWidget->setFiles(hash, t.name, t.fileList);
-                filesWidget->show();
-                verticalSplitter->setSizes(filesSplitterSizes_);
-            }
-        });
 }
 
 // --- Search filters (size / file-count ranges) ------------------------------
@@ -1355,14 +1339,7 @@ void MainWindow::onTorrentSelected(const QModelIndex& index)
     if (!hit.torrent.isValid())
         return;
 
-    showTorrentDetails(hit.torrent);
-
-    // A remote hit arrives with metadata only — search replies never carry file
-    // lists. If the files panel came up empty (nothing embedded, nothing local),
-    // pull the full torrent from the peer that offered it. The reply repopulates
-    // the panel and clones the torrent, with its files, into our database.
-    if (hit.remote && !hit.sourcePeerId.isEmpty() && !filesWidget->hasFiles() && app_->peerApi())
-        app_->peerApi()->requestTorrent(hit.sourcePeerId, hit.torrent.hash, /*includeFiles*/ true);
+    showTorrentDetails(hit.torrent, hit.sourcePeerId);
 }
 
 void MainWindow::onTorrentDoubleClicked(const QModelIndex& index)
@@ -1424,19 +1401,34 @@ void MainWindow::onDetailsPanelCloseRequested()
     resultsTableView->clearSelection();
 }
 
-void MainWindow::showTorrentDetails(const Torrent& torrent)
+void MainWindow::showTorrentDetails(const Torrent& torrent, const QString& peerId)
 {
+    const quint64 requestId = ++filesRequestId_;
     detailsPanel->setTorrent(torrent);
     detailsPanel->show();
 
-    // Show the file list. TorrentFilesWidget fetches the files itself (from the
-    // torrent's embedded list or the repository) via the Application. For a remote
-    // torrent with no local files, onTorrentSelected kicks off a peer fetch whose
-    // reply repopulates this panel through the peerApi::remoteTorrentReceived
-    // handler.
     filesWidget->setTorrent(torrent);
     filesWidget->show();
     verticalSplitter->setSizes(filesSplitterSizes_);
+    if (filesWidget->hasCompleteFiles(torrent.files) || !app_ || !app_->api())
+        return;
+
+    filesWidget->setStatus(tr("Loading complete file list..."));
+    QPointer<MainWindow> self(this);
+    app_->api()->call("torrent.get",
+        QJsonObject { { "hash", torrent.hash }, { "files", true }, { "peer", peerId } },
+        [self, requestId, hash = torrent.hash, expected = torrent.files](const Result& result) {
+            if (!self || self->filesRequestId_ != requestId || !self->detailsPanel->isVisible()
+                || self->detailsPanel->currentHash() != hash)
+                return;
+            const Torrent fetched = result.ok() ? codec::torrentFromJson(result.data().toObject()) : Torrent {};
+            if (!fetched.fileList.isEmpty() && fetched.hash == hash) {
+                self->filesWidget->setFiles(hash, fetched.name, fetched.fileList);
+                if (self->filesWidget->hasCompleteFiles(qMax(expected, fetched.files)))
+                    return;
+            }
+            self->filesWidget->setStatus(self->tr("Complete file list unavailable; select the torrent to retry."));
+        });
 }
 
 void MainWindow::openMagnetLink(const Torrent& torrent)
@@ -1634,6 +1626,11 @@ void MainWindow::refreshSpiderStatus()
     // "Active" is emitted with nobody connected yet.
     auto* crawler = app_ ? app_->crawler() : nullptr;
     const bool running = crawler && crawler->isRunning();
+    spiderStatusLabel->setToolTip(crawler
+        ? tr("Metadata requests: %1 active; configured limit: %2%3")
+            .arg(crawler->activeMetadataFetches()).arg(crawler->metadataConcurrency())
+            .arg(crawler->metadataBackpressured() ? tr("; waiting for capacity") : QString())
+        : QString());
     spiderStatusLabel->setText(tr("🕷️ Spider: %1").arg(running ? tr("Active") : tr("Stopped")));
 }
 

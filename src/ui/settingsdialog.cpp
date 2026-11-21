@@ -7,6 +7,9 @@
 #include "app/translation_manager.h"
 #include "autostartmanager.h"
 #include "common/logging.h"
+#include "common/crawler_limits.h"
+#include "net/crawler.h"
+#include <QTimer>
 #include "services/download_service.h"
 #include "rest/api_router.h"
 #include <QApplication>
@@ -353,6 +356,35 @@ QWidget* SettingsDialog::createIndexerTab()
     walkIntervalSpin_->setToolTip(tr("Interval between DHT walks (lower = faster, more CPU)"));
     perfLayout->addRow(tr("Walk interval:"), walkIntervalSpin_);
 
+    crawlerConcurrencySpin_ = new QSpinBox();
+    crawlerConcurrencySpin_->setObjectName("crawlerMetadataConcurrency");
+    crawlerConcurrencySpin_->setRange(1, rats::common::CrawlerLimits::MaxConcurrency);
+    crawlerConcurrencySpin_->setToolTip(tr("Maximum concurrent crawler metadata requests. Capacity limits may keep the actual count lower. Changes apply after Save without restarting."));
+    perfLayout->addRow(tr("Metadata concurrency limit:"), crawlerConcurrencySpin_);
+    crawlerActivityLabel_ = new QLabel();
+    crawlerActivityLabel_->setObjectName("crawlerMetadataActivity");
+    crawlerActivityLabel_->setWordWrap(true);
+    perfLayout->addRow(tr("Current activity:"), crawlerActivityLabel_);
+    const auto refreshActivity = [this] {
+        const auto* crawler = app_ ? app_->crawler() : nullptr;
+        crawlerActivityLabel_->setText(crawler
+            ? tr("%1 active; saved limit %2%3").arg(crawler->activeMetadataFetches()).arg(crawler->metadataConcurrency())
+                .arg(crawler->metadataBackpressured() ? tr("; waiting for capacity") : QString())
+            : tr("Stopped"));
+    };
+    if (app_ && app_->crawler()) connect(app_->crawler(), &rats::net::Crawler::metadataActivityChanged, this, refreshActivity);
+    refreshActivity();
+    crawlerPendingSpin_ = new QSpinBox();
+    crawlerPendingSpin_->setObjectName("crawlerPendingLimit");
+    crawlerPendingSpin_->setRange(1, rats::common::CrawlerLimits::Pending);
+    crawlerPendingSpin_->setToolTip(tr("Shared task limit for lookups, result reservations, writes and retries. The 64 MiB estimated byte budget also applies."));
+    perfLayout->addRow(tr("Pending task limit:"), crawlerPendingSpin_);
+    crawlerBatchSpin_ = new QSpinBox();
+    crawlerBatchSpin_->setObjectName("crawlerBatchSize");
+    crawlerBatchSpin_->setRange(1, 100);
+    crawlerBatchSpin_->setToolTip(tr("Maximum items per database batch. Sparse batches still flush after 100 ms."));
+    perfLayout->addRow(tr("Database batch size:"), crawlerBatchSpin_);
+
     QLabel* perfHint = new QLabel(tr("* Lower walk interval = faster indexing but higher CPU usage"));
     perfHint->setObjectName("hintLabel");
     perfHint->setWordWrap(true);
@@ -687,6 +719,9 @@ void SettingsDialog::loadSettings()
     indexerCheck_->setChecked(config_->indexerEnabled());
     trackersCheck_->setChecked(config_->trackersEnabled());
     walkIntervalSpin_->setValue(config_->spiderWalkInterval());
+    crawlerConcurrencySpin_->setValue(config_->spiderMetadataConcurrency());
+    crawlerPendingSpin_->setValue(config_->spiderPendingLimit());
+    crawlerBatchSpin_->setValue(config_->spiderBatchSize());
 
     // Filters
     maxFilesSpin_->setValue(config_->filtersMaxFiles());
@@ -775,6 +810,9 @@ void SettingsDialog::saveSettings()
     config_->setIndexerEnabled(indexerCheck_->isChecked());
     config_->setTrackersEnabled(trackersCheck_->isChecked());
     config_->setSpiderWalkInterval(walkIntervalSpin_->value());
+    config_->setSpiderPendingLimit(crawlerPendingSpin_->value());
+    config_->setSpiderBatchSize(crawlerBatchSpin_->value());
+    config_->setSpiderMetadataConcurrency(crawlerConcurrencySpin_->value());
 
     // Save Filters
     config_->setFiltersMaxFiles(maxFilesSpin_->value());

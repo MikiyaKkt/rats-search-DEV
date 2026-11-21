@@ -20,6 +20,7 @@
 #include <QTimer>
 #include <QVersionNumber>
 #include <QtConcurrent>
+#include <QScopeGuard>
 
 namespace rats::service {
 
@@ -80,12 +81,7 @@ MigrationService::MigrationService(const QString& dataDirectory, data::Database*
 
 MigrationService::~MigrationService()
 {
-    if (isRunning_.load()) {
-        requestStop();
-        if (asyncFuture_.isRunning()) {
-            asyncFuture_.waitForFinished();
-        }
-    }
+    shutdown();
     saveState();
 }
 
@@ -577,7 +573,9 @@ void MigrationService::startAsyncMigrations()
     stopRequested_.store(false);
     progressSaveTimer_->start();
 
-    asyncFuture_ = QtConcurrent::run([this, pendingMigrations]() {
+    const auto generation = ++generation_;
+    asyncFuture_ = QtConcurrent::run([this, pendingMigrations, generation]() {
+        const auto connection = qScopeGuard([this] { db_->closeCurrentThreadConnection(); });
         for (const auto& migration : pendingMigrations) {
             if (stopRequested_.load()) {
                 qInfo() << "[Migration] stop requested, breaking";
@@ -616,7 +614,8 @@ void MigrationService::startAsyncMigrations()
 
         QMetaObject::invokeMethod(
             this,
-            [this]() {
+            [this, generation]() {
+                if (generation != generation_) return;
                 isRunning_.store(false);
                 progressSaveTimer_->stop();
                 {
@@ -644,6 +643,17 @@ void MigrationService::requestStop()
     }
     qInfo() << "[Migration] requesting stop...";
     stopRequested_.store(true);
+    saveState();
+}
+
+void MigrationService::shutdown()
+{
+    requestStop();
+    if (asyncFuture_.isRunning()) asyncFuture_.waitForFinished();
+    ++generation_;
+    isRunning_.store(false);
+    { QMutexLocker locker(&stateMutex_); currentProgress_.isRunning = false; }
+    progressSaveTimer_->stop();
     saveState();
 }
 

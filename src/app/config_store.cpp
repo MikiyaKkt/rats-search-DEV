@@ -1,6 +1,8 @@
 #include "app/config_store.h"
 
 #include "common/logging.h"
+#include "common/crawler_limits.h"
+#include <cmath>
 
 #include <QDebug>
 #include <QDir>
@@ -22,6 +24,17 @@ constexpr int kMaxP2pConnections = 1000;
 // so an out-of-range value can never reach the services.
 QVariant clampToRange(const QString& key, const QVariant& value)
 {
+    int fallback = 0, maximum = 0;
+    if (key == QLatin1String("spider.metadataConcurrency")) { fallback = common::CrawlerLimits::DefaultConcurrency; maximum = common::CrawlerLimits::MaxConcurrency; }
+    else if (key == QLatin1String("spider.pendingLimit")) { fallback = common::CrawlerLimits::Pending; maximum = common::CrawlerLimits::Pending; }
+    else if (key == QLatin1String("spider.batchSize")) { fallback = 100; maximum = 100; }
+    if (maximum) {
+        // Malformed or fractional input falls back to the documented default;
+        // integral values outside the range are clamped on every write path.
+        bool ok = false; const double n = value.toDouble(&ok);
+        if (!ok || value.metaType().id() == QMetaType::Bool || !std::isfinite(n) || std::floor(n) != n) return fallback;
+        return int(qBound(1.0, n, double(maximum)));
+    }
     if (key == QLatin1String("uiFontScale")) {
         return qBound(ConfigStore::kMinUiFontScale, value.toInt(), ConfigStore::kMaxUiFontScale);
     }
@@ -83,7 +96,7 @@ void ConfigStore::setDefaults()
         { "relay", true }, { "relayServe", false },
 
         // Spider
-        { "spider", QJsonObject { { "walkInterval", 100 } } },
+        { "spider", QJsonObject { { "walkInterval", 100 }, { "metadataConcurrency", common::CrawlerLimits::DefaultConcurrency }, { "pendingLimit", common::CrawlerLimits::Pending }, { "batchSize", 100 } } },
 
         // Filters
         { "filters",
@@ -190,6 +203,10 @@ void ConfigStore::validateAndClamp()
     config_["uiFontScale"]
         = QJsonValue::fromVariant(clampToRange("uiFontScale", config_["uiFontScale"].toInt(kDefaultUiFontScale)));
 
+    for (const auto& key : {"spider.metadataConcurrency", "spider.pendingLimit", "spider.batchSize"}) {
+        const auto current = readJsonValue(QLatin1String(key));
+        writeJsonValue(QLatin1String(key), QJsonValue::fromVariant(clampToRange(QLatin1String(key), current.toVariant())));
+    }
     // Replication needs the replication server. The typed setters keep this
     // invariant on writes; this repairs a config file edited by hand.
     if (config_["p2pReplication"].toBool() && !config_["p2pReplicationServer"].toBool()) {
@@ -386,6 +403,13 @@ void ConfigStore::setSpiderWalkInterval(int interval)
 {
     setValue("spider.walkInterval", interval);
 }
+
+int ConfigStore::spiderMetadataConcurrency() const { return config_["spider"].toObject()["metadataConcurrency"].toInt(common::CrawlerLimits::DefaultConcurrency); }
+void ConfigStore::setSpiderMetadataConcurrency(int value) { setValue("spider.metadataConcurrency", value); }
+int ConfigStore::spiderPendingLimit() const { return config_["spider"].toObject()["pendingLimit"].toInt(common::CrawlerLimits::Pending); }
+void ConfigStore::setSpiderPendingLimit(int value) { setValue("spider.pendingLimit", value); }
+int ConfigStore::spiderBatchSize() const { return config_["spider"].toObject()["batchSize"].toInt(100); }
+void ConfigStore::setSpiderBatchSize(int value) { setValue("spider.batchSize", value); }
 
 // ============================================================================
 // Filter Settings

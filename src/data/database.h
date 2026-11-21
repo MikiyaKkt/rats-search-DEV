@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QVariantMap>
 #include <QVector>
+#include <QSet>
 
 namespace rats::data {
 
@@ -22,13 +23,22 @@ public:
     using Rows = QVector<Row>;
 
     explicit Database(Manticore* manticore, QObject* parent = nullptr);
+    struct WriteReport {
+        QSet<qint64> confirmed;
+        QSet<qint64> uncertain;
+        QSet<qint64> rejected;
+        bool success() const { return uncertain.isEmpty() && rejected.isEmpty(); }
+    };
+    static constexpr int MaxStatementBytes = 1 << 20;
+    WriteReport replaceManyConfirmed(const QString& table, const QVector<QVariantMap>& rows);
 
     bool isConnected() const;
+    void closeCurrentThreadConnection();
 
     // Run a SELECT (or any row-returning statement). `?` placeholders in `sql`
     // are substituted with escaped `params`. On error the result is empty and
     // *ok (if provided) is set to false.
-    Rows query(const QString& sql, const QVariantList& params = {}, bool* ok = nullptr);
+    virtual Rows query(const QString& sql, const QVariantList& params = {}, bool* ok = nullptr);
 
     // Run a statement with no result set (DDL, OPTIMIZE, FLUSH, ...).
     bool execute(const QString& sql);
@@ -59,9 +69,11 @@ public:
 
     qint64 count(const QString& table, const QString& whereRaw = QString());
 
-private:
+protected:
     // Single execution core for every write/DDL statement.
-    bool runWrite(const QString& sqlText, const char* op, const QString& table);
+    virtual bool runWrite(const QString& sqlText, const char* op, const QString& table);
+private:
+    WriteReport writeRowsConfirmed(const char* verb, const QString& table, const QVector<QVariantMap>& rows);
     // Shared bodies for INSERT/REPLACE, which differ only in the verb.
     bool writeRow(const char* verb, const QString& table, const QVariantMap& values);
     bool writeRows(const char* verb, const QString& table, const QVector<QVariantMap>& rows);

@@ -2,16 +2,23 @@
 
 #include "data/manticore.h"
 #include "data/query.h"
+#include "common/performance_metrics.h"
 
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QSqlRecord>
+#include <QCoreApplication>
+#include <QScopeGuard>
+#include <QThread>
+#include <optional>
 
 namespace rats::data {
 
 Database::Database(Manticore* manticore, QObject* parent) : QObject(parent), manticore_(manticore) { }
+
+void Database::closeCurrentThreadConnection() { manticore_->closeCurrentThreadConnection(); }
 
 bool Database::isConnected() const
 {
@@ -20,6 +27,18 @@ bool Database::isConnected() const
 
 Database::Rows Database::query(const QString& sql, const QVariantList& params, bool* ok)
 {
+    auto& metrics = common::PerformanceMetrics::instance();
+    common::PerformanceTimer timing(QStringLiteral("db.query_ms"));
+    std::optional<common::PerformanceTimer> mainTiming;
+    if (QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread()) {
+        mainTiming.emplace(QStringLiteral("db.main_query_ms"));
+        metrics.increment(QStringLiteral("db.main_query_calls"));
+    }
+    metrics.increment(QStringLiteral("db.query_calls"));
+    bool succeeded = false;
+    const auto outcome = qScopeGuard([&] {
+        metrics.increment(succeeded ? QStringLiteral("db.query_ok") : QStringLiteral("db.query_failed"));
+    });
     Rows rows;
     if (ok)
         *ok = false;
@@ -50,13 +69,29 @@ Database::Rows Database::query(const QString& sql, const QVariantList& params, b
 
     if (ok)
         *ok = true;
-    qInfo().noquote()
+    succeeded = true;
+    metrics.increment(QStringLiteral("db.rows_returned"), rows.size());
+    qCDebug(common::crawlerDetail).noquote()
         << QStringLiteral("Database: %1 rows in %2ms | %3").arg(rows.size()).arg(timer.elapsed()).arg(sql.left(120));
     return rows;
 }
 
 bool Database::runWrite(const QString& sqlText, const char* op, const QString& table)
 {
+    auto& metrics = common::PerformanceMetrics::instance();
+    common::PerformanceTimer timing(QStringLiteral("db.write_ms"));
+    std::optional<common::PerformanceTimer> mainTiming;
+    if (QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread()) {
+        mainTiming.emplace(QStringLiteral("db.main_write_ms"));
+        metrics.increment(QStringLiteral("db.main_write_calls"));
+    }
+    metrics.increment(QStringLiteral("db.write_calls"));
+    if (metrics.enabled())
+        metrics.observe(QStringLiteral("db.statement_bytes"), sqlText.toUtf8().size());
+    bool succeeded = false;
+    const auto outcome = qScopeGuard([&] {
+        metrics.increment(succeeded ? QStringLiteral("db.write_ok") : QStringLiteral("db.write_failed"));
+    });
     QSqlDatabase db = manticore_->getDatabase();
     if (!db.isOpen() && !db.open()) {
         qWarning() << "Database:" << op << "connection not open:" << db.lastError().text();
@@ -71,7 +106,8 @@ bool Database::runWrite(const QString& sqlText, const char* op, const QString& t
         return false;
     }
 
-    qInfo().noquote() << QStringLiteral("Database: %1 %2 | %3ms | affected %4")
+    succeeded = true;
+    qCDebug(common::crawlerDetail).noquote() << QStringLiteral("Database: %1 %2 | %3ms | affected %4")
                              .arg(QString::fromLatin1(op), table)
                              .arg(timer.elapsed())
                              .arg(q.numRowsAffected());
@@ -114,61 +150,54 @@ bool Database::writeRow(const char* verb, const QString& table, const QVariantMa
     const QString stmt
         = QStringLiteral("%1 INTO %2 (%3) VALUES (%4)")
               .arg(QLatin1String(verb), table, columns.join(QLatin1String(", ")), literals.join(QLatin1String(", ")));
+    common::PerformanceMetrics::instance().observe(QStringLiteral("db.rows_per_statement"), 1);
     return runWrite(stmt, verb, table);
 }
 
 bool Database::writeRows(const char* verb, const QString& table, const QVector<QVariantMap>& rows)
 {
-    if (rows.isEmpty())
-        return true;
+    return writeRowsConfirmed(verb, table, rows).success();
+}
 
-    // QVariantMap iterates in key order, so taking the columns from the first row
-    // gives every row the same layout.
+Database::WriteReport Database::replaceManyConfirmed(const QString& table, const QVector<QVariantMap>& rows)
+{
+    return writeRowsConfirmed("REPLACE", table, rows);
+}
+
+Database::WriteReport Database::writeRowsConfirmed(const char* verb, const QString& table, const QVector<QVariantMap>& rows)
+{
+    WriteReport result;
+    if (rows.isEmpty()) return result;
     QStringList columns;
-    for (auto it = rows.first().constBegin(); it != rows.first().constEnd(); ++it)
-        columns << it.key();
-
-    const QString prefix
-        = QStringLiteral("%1 INTO %2 (%3) VALUES ").arg(QLatin1String(verb), table, columns.join(QLatin1String(", ")));
-
-    // searchd rejects anything over max_packet_size (8M by default), and a feed
-    // row carries a whole torrent's JSON, so cap the statement well below that
-    // rather than assuming a fixed row count is safe.
-    constexpr int kMaxStatementChars = 1 << 20;
-
-    bool ok = true;
-    QString stmt;
-    int pending = 0;
-
-    auto flushBatch = [&]() {
-        if (pending == 0)
-            return;
-        if (!runWrite(stmt, verb, table))
-            ok = false;
-        stmt.clear();
-        pending = 0;
+    for (auto it = rows.first().cbegin(); it != rows.first().cend(); ++it) columns << it.key();
+    const QString prefix = QStringLiteral("%1 INTO %2 (%3) VALUES ")
+        .arg(QLatin1String(verb), table, columns.join(QLatin1String(", ")));
+    QString statement = prefix;
+    qint64 bytes = prefix.toUtf8().size();
+    QSet<qint64> pending;
+    auto flush = [&] {
+        if (pending.isEmpty()) return;
+        common::PerformanceMetrics::instance().observe(QStringLiteral("db.rows_per_statement"), pending.size());
+        if (runWrite(statement, verb, table)) result.confirmed.unite(pending);
+        else result.uncertain.unite(pending);
+        pending.clear(); statement = prefix; bytes = prefix.toUtf8().size();
     };
-
-    for (const QVariantMap& row : rows) {
+    for (const auto& row : rows) {
         QStringList literals;
-        literals.reserve(columns.size());
-        for (const QString& column : columns)
-            literals << sql::formatValue(row.value(column));
+        for (const auto& column : columns) literals << sql::formatValue(row.value(column));
         const QString tuple = QStringLiteral("(%1)").arg(literals.join(QLatin1String(", ")));
-
-        if (pending > 0 && stmt.size() + tuple.size() + 1 > kMaxStatementChars)
-            flushBatch();
-
-        if (pending == 0)
-            stmt = prefix;
-        else
-            stmt += QLatin1Char(',');
-        stmt += tuple;
-        ++pending;
+        const auto tupleBytes = tuple.toUtf8().size();
+        const auto id = row.value(QStringLiteral("id")).toLongLong();
+        if (prefix.toUtf8().size() + tupleBytes > MaxStatementBytes) {
+            result.rejected.insert(id);
+            continue;
+        }
+        if (bytes + tupleBytes + 1 > MaxStatementBytes || pending.size() >= 500) flush();
+        if (!pending.isEmpty()) { statement += QLatin1Char(','); ++bytes; }
+        statement += tuple; bytes += tupleBytes; pending.insert(id);
     }
-    flushBatch();
-
-    return ok;
+    flush();
+    return result;
 }
 
 bool Database::update(const QString& table, const QVariantMap& values, const QVariantMap& where)

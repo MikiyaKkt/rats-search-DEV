@@ -1,3 +1,4 @@
+#include <QScopeGuard>
 #include "services/database_sync_service.h"
 
 #include "data/torrent_repository.h"
@@ -436,7 +437,7 @@ bool DatabaseSyncService::exportToFile(const QString& path, QString* error)
     }
     publishLocal();
 
-    op->worker = QtConcurrent::run([this, op, path]() { runExport(op, path); });
+    op->worker = QtConcurrent::run([this, op, path]() { const auto connection = qScopeGuard([this] { repository_->closeCurrentThreadConnection(); }); runExport(op, path); });
     return true;
 }
 
@@ -506,7 +507,7 @@ bool DatabaseSyncService::importFromFile(const QString& path, const ImportOption
     const LocalPtr op = beginLocal(Operation::Import, path, QString(), error);
     if (!op)
         return false;
-    op->worker = QtConcurrent::run([this, op, path, options]() { runImport(op, path, options); });
+    op->worker = QtConcurrent::run([this, op, path, options]() { const auto connection = qScopeGuard([this] { repository_->closeCurrentThreadConnection(); }); runImport(op, path, options); });
     return true;
 }
 
@@ -554,7 +555,7 @@ void DatabaseSyncService::runImport(const LocalPtr& op, const QString& path, con
                 Qt::QueuedConnection);
         });
 
-    if (!result.cancelled)
+    if (result.ok)
         clearResumeState();
 
     QMetaObject::invokeMethod(
@@ -732,7 +733,7 @@ void DatabaseSyncService::startPullImport(const LocalPtr& op, const QString& dum
     }
     op->operation = Operation::Import;
     op->deadlineMs = 0;
-    op->worker = QtConcurrent::run([this, op, dumpPath, options]() { runImport(op, dumpPath, options); });
+    op->worker = QtConcurrent::run([this, op, dumpPath, options]() { const auto connection = qScopeGuard([this] { repository_->closeCurrentThreadConnection(); }); runImport(op, dumpPath, options); });
 }
 
 // ===========================================================================
@@ -912,7 +913,7 @@ bool DatabaseSyncService::ensureSnapshotJob()
     job->id = ++nextSnapshotJobId_;
     job->total = torrents;
     snapshotJob_ = job;
-    job->worker = QtConcurrent::run([this, job]() { runSnapshot(job); });
+    job->worker = QtConcurrent::run([this, job]() { const auto connection = qScopeGuard([this] { repository_->closeCurrentThreadConnection(); }); runSnapshot(job); });
     publishServe();
     return true;
 }

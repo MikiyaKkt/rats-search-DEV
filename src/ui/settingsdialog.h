@@ -112,6 +112,8 @@ private:
 
     // Performance settings
     QSpinBox* walkIntervalSpin_;
+    QSpinBox *crawlerConcurrencySpin_, *crawlerPendingSpin_, *crawlerBatchSpin_;
+    QLabel* crawlerActivityLabel_;
 
     // Filter settings
     QSpinBox* maxFilesSpin_;

@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QMutexLocker>
 #include <QRegularExpression>
+#include <QThread>
 
 namespace rats::data {
 
@@ -104,14 +105,61 @@ void applyRangeFilters(SelectQuery& builder, const TorrentRepository::SearchQuer
 
 TorrentRepository::TorrentRepository(Database* db, QObject* parent) : QObject(parent), db_(db) { }
 
+void TorrentRepository::closeCurrentThreadConnection() { db_->closeCurrentThreadConnection(); }
+
+TorrentRepository::WriteGuard::WriteGuard(TorrentRepository* repository)
+    : repository_(repository), lock_(repository->writeMutex_)
+{
+    ++repository_->writeDepth_;
+}
+
+TorrentRepository::WriteGuard::~WriteGuard() { unlock(); }
+
+void TorrentRepository::WriteGuard::unlock()
+{
+    if (!lock_.owns_lock()) return;
+    QVector<std::function<void()>> pending;
+    if (--repository_->writeDepth_ == 0) pending.swap(repository_->notifications_);
+    // Posting under the lock preserves commit order; receivers execute after unlock.
+    for (auto& notification : pending)
+        QMetaObject::invokeMethod(repository_, std::move(notification), Qt::QueuedConnection);
+    lock_.unlock();
+}
+
+void TorrentRepository::notify(std::function<void()> notification)
+{
+    notifications_.append(std::move(notification));
+}
+
 TorrentRepository::Statistics TorrentRepository::statistics() const
 {
     QMutexLocker lock(&statsMutex_);
-    return stats_;
+    auto copy = stats_;
+    copy.exact = !statisticsDirty_.load();
+    return copy;
+}
+
+bool TorrentRepository::reconcileStatistics()
+{
+    WriteGuard write(this);
+    if (statisticsDirty_) primeFromDatabase();
+    return !statisticsDirty_;
+}
+
+bool TorrentRepository::takeConfirmedInsert(const QString& hash)
+{
+    WriteGuard write(this);
+    if (!unconfirmedInserts_.contains(hash)) return false;
+    const auto slot = resolve(hash);
+    return !slot.failed && slot.ours && unconfirmedInserts_.remove(hash);
 }
 
 void TorrentRepository::bumpStatistics(qint64 torrents, qint64 files, qint64 totalSize)
 {
+    if (statisticsDirty_) {
+        primeFromDatabase();
+        return; // recount includes this write; applying its delta would double count
+    }
     Statistics now;
     {
         QMutexLocker lock(&statsMutex_);
@@ -123,13 +171,17 @@ void TorrentRepository::bumpStatistics(qint64 torrents, qint64 files, qint64 tot
         stats_.totalSize = qMax(0LL, stats_.totalSize + totalSize);
         now = stats_;
     }
-    emit statisticsChanged(now.torrents, now.files, now.totalSize);
+    notify([this, now] { emit statisticsChanged(now.torrents, now.files, now.totalSize); });
 }
 
 void TorrentRepository::primeFromDatabase()
 {
+    WriteGuard write(this);
+    bool ok = false;
     const auto rows = db_->query(QStringLiteral("SELECT COUNT(*) AS cnt, SUM(files) AS numfiles, "
-                                                "SUM(size) AS totalsize FROM torrents"));
+                                                "SUM(size) AS totalsize FROM torrents"), {}, &ok);
+    statisticsDirty_ = !ok;
+    if (!ok) return;
     if (!rows.isEmpty()) {
         QMutexLocker lock(&statsMutex_);
         stats_.torrents = rows.first().value(QStringLiteral("cnt")).toLongLong();
@@ -138,7 +190,7 @@ void TorrentRepository::primeFromDatabase()
     }
     const Statistics primed = statistics();
     qInfo() << "[TorrentRepository] primed:" << primed.torrents << "torrents," << primed.files << "files";
-    emit statisticsChanged(primed.torrents, primed.files, primed.totalSize);
+    notify([this, primed] { emit statisticsChanged(primed.torrents, primed.files, primed.totalSize); });
 }
 
 // ---------------------------------------------------------------------------
@@ -158,8 +210,10 @@ TorrentRepository::RowSlot TorrentRepository::resolve(const QString& hash, bool 
     // a get() on the same id — the crawler's insert path asks every torrent this
     // question, so the columns are only paid for when someone needs them.
     const QString columns = withRow ? QStringLiteral("*") : QStringLiteral("hash");
+    bool ok = false;
     const auto rows
-        = db_->query(QStringLiteral("SELECT %1 FROM torrents WHERE id = ? LIMIT 1").arg(columns), { slot.id });
+        = db_->query(QStringLiteral("SELECT %1 FROM torrents WHERE id = ? LIMIT 1").arg(columns), { slot.id }, &ok);
+    slot.failed = !ok;
     if (rows.isEmpty())
         return slot;
 
@@ -228,24 +282,27 @@ QVariantMap TorrentRepository::filesRow(const QString& hash, const QVector<File>
 
 bool TorrentRepository::add(const Torrent& t)
 {
+    WriteGuard write(this);
     if (!t.isValid())
         return false;
     return add(t, resolve(t.hash));
 }
 
-bool TorrentRepository::add(const Torrent& t, const RowSlot& slot)
+bool TorrentRepository::add(const Torrent& t, const RowSlot& suppliedSlot)
 {
+    WriteGuard write(this);
     if (!t.isValid())
         return false;
 
     // A slot resolved for a different hash would send the write to a stranger's
     // row, so it is refused rather than re-resolved: a caller passing the wrong
     // one has a bug, and silently papering over it would hide it.
-    if (slot.id != rowIdFromHash(t.hash)) {
+    if (suppliedSlot.id != rowIdFromHash(t.hash)) {
         qWarning() << "[TorrentRepository] slot does not belong to" << t.hash << "- refusing to store";
         return false;
     }
-    if (slot.id == 0)
+    const RowSlot slot = resolve(t.hash);
+    if (slot.failed || slot.id == 0)
         return false;
     if (slot.collided()) {
         qWarning() << "[TorrentRepository] row id collision, refusing to store" << t.hash;
@@ -263,11 +320,12 @@ bool TorrentRepository::add(const Torrent& t, const RowSlot& slot)
     // REPLACE rather than INSERT: the id is derived, and Manticore rejects an
     // INSERT onto an id that already exists. The slot check above proved it is
     // free, so this only guards against a concurrent writer claiming it first.
+    // Store details first: a failed file write must not leave a new summary
+    // looking fully indexed and suppressing subsequent metadata fetches.
+    if (!t.fileList.isEmpty() && !saveFiles(t.hash, t.fileList))
+        return false;
     if (!db_->replace(kTorrents, values))
         return false;
-
-    if (!t.fileList.isEmpty())
-        saveFiles(t.hash, t.fileList);
 
     bumpStatistics(1, t.files, t.size);
     return true;
@@ -275,6 +333,7 @@ bool TorrentRepository::add(const Torrent& t, const RowSlot& slot)
 
 bool TorrentRepository::update(const Torrent& t)
 {
+    WriteGuard write(this);
     if (!t.isValid())
         return false;
 
@@ -289,7 +348,7 @@ bool TorrentRepository::update(const Torrent& t)
     // Every caller passes a Torrent it just read back with get(), so the row
     // rebuilt here is complete rather than a partial overwrite.
     const RowSlot slot = resolve(t.hash);
-    if (slot.id == 0)
+    if (slot.failed || !slot.taken || slot.id == 0)
         return false;
     if (slot.collided()) {
         qWarning() << "[TorrentRepository] row id collision, refusing to update" << t.hash;
@@ -302,12 +361,34 @@ bool TorrentRepository::update(const Torrent& t)
 
     if (!db_->replace(kTorrents, values))
         return false;
-    emit torrentUpdated(t.hash);
+    notify([this, hash = t.hash] { emit torrentUpdated(hash); });
     return true;
+}
+
+bool TorrentRepository::updateVotes(const QString& hash, int good, int bad, bool keepMaximum)
+{
+    WriteGuard write(this);
+    const auto stored = get(hash);
+    if (!stored) return false;
+    if (keepMaximum) { good = qMax(good, stored->good); bad = qMax(bad, stored->bad); }
+    if (!db_->update(kTorrents, {{"good", good}, {"bad", bad}}, {{"id", stored->id}})) return false;
+    notify([this, hash] { emit torrentUpdated(hash); });
+    return true;
+}
+
+std::optional<Torrent> TorrentRepository::incrementVote(const QString& hash, bool good)
+{
+    WriteGuard write(this);
+    auto stored = get(hash);
+    if (!stored) return std::nullopt;
+    if (good) ++stored->good; else ++stored->bad;
+    if (!updateVotes(hash, stored->good, stored->bad)) return std::nullopt;
+    return stored;
 }
 
 bool TorrentRepository::remove(const QString& hash)
 {
+    WriteGuard write(this);
     qint64 removedSize = 0;
     int removedFiles = 0;
     const qint64 id = rowIdFromHash(hash);
@@ -324,10 +405,10 @@ bool TorrentRepository::remove(const QString& hash)
         removedFiles = rows.first().value(QStringLiteral("files")).toInt();
     }
 
-    db_->remove(kTorrents, { { "id", id } });
-    db_->remove(kFiles, { { "id", id } });
+    if (!db_->remove(kFiles, {{"id", id}}) || !db_->remove(kTorrents, {{"id", id}}))
+        return false;
 
-    if (removedSize > 0 || removedFiles > 0) {
+    if (!rows.isEmpty()) {
         bumpStatistics(-1, -removedFiles, -removedSize);
     }
     return true;
@@ -484,10 +565,8 @@ QVector<SearchHit> TorrentRepository::searchFiles(const SearchQuery& q)
         hit.torrent = t;
         hit.fromFileMatch = true;
         hit.matchingPaths = snippetsByHash.value(t.hash);
-        // File-match hits carry only the matched paths, so give consumers a
-        // lightweight fileList built from them (sizes are unknown here).
-        for (const QString& path : hit.matchingPaths)
-            hit.torrent.fileList.append(File { path, 0 });
+        // Snippets belong to the search hit, never to the torrent's file list:
+        // consumers must load the complete, unhighlighted paths from filesOf().
         hits.append(hit);
     }
 
@@ -553,8 +632,9 @@ QVector<Torrent> TorrentRepository::random(int limit, bool includeFiles)
     return results;
 }
 
-QHash<QString, Torrent> TorrentRepository::getMany(const QStringList& hashes, QSet<QString>* collided)
+QHash<QString, Torrent> TorrentRepository::getMany(const QStringList& hashes, QSet<QString>* collided, bool* ok)
 {
+    if (ok) *ok = true;
     QHash<QString, Torrent> result;
     if (hashes.isEmpty())
         return result;
@@ -562,13 +642,18 @@ QHash<QString, Torrent> TorrentRepository::getMany(const QStringList& hashes, QS
     QHash<qint64, QStringList> wanted;
     const QVector<qint64> ids = idsFor(hashes, wanted);
     const QString sql = SelectQuery(kTorrents).whereInIds(QStringLiteral("id"), ids).limit(0, ids.size()).build();
-    for (const Torrent& t : selectTorrents(sql)) {
+    bool queryOk = false;
+    const auto rows = db_->query(sql, {}, &queryOk);
+    if (ok) *ok = queryOk;
+    if (!queryOk) return result;
+    for (const auto& row : rows) {
+        const Torrent t = rowToTorrent(row);
         // One row answers every hash that asked for its id: the one it actually
         // belongs to is found, and each of the others lost the slot and must be
         // reported so the caller drops it instead of writing over this row.
         for (const QString& want : wanted.value(t.id)) {
             if (sameHash(t.hash, want))
-                result.insert(t.hash, t);
+                result.insert(want, t);
             else if (collided)
                 *collided += want;
         }
@@ -578,73 +663,133 @@ QHash<QString, Torrent> TorrentRepository::getMany(const QStringList& hashes, QS
 
 int TorrentRepository::addMany(const QVector<Torrent>& torrents)
 {
-    if (torrents.isEmpty())
-        return 0;
+    int inserted = 0;
+    for (const auto& item : addManyConfirmed(torrents))
+        if (item.status == PersistStatus::Inserted) ++inserted;
+    return inserted;
+}
 
-    QVector<QVariantMap> torrentRows;
-    QVector<QVariantMap> fileRows;
-    torrentRows.reserve(torrents.size());
-    qint64 addedFiles = 0;
-    qint64 addedSize = 0;
-    // Which hash already claimed each row id in this batch. Callers dedupe against
-    // the *index* before getting here (insertBatch does it with one getMany), but
-    // nothing dedupes the batch against itself, and two rows sharing an id inside
-    // one REPLACE are resolved by Manticore keeping whichever it applies last.
-    QHash<qint64, QString> claimedBy;
-    claimedBy.reserve(torrents.size());
-
-    for (const Torrent& t : torrents) {
-        if (!t.isValid())
-            continue;
-        // The same refusal add() makes, and for the same reason: a hash that
-        // derives to id 0 is one Manticore auto-assigns an id for, producing a
-        // row no lookup by hash can reach while it still counts towards the
-        // statistics and is re-inserted on every import. Validation upstream
-        // should already have caught it — this is the guard on the write itself,
-        // which is where the invariant has to hold.
-        const qint64 id = rowIdFromHash(t.hash);
-        if (id == 0) {
-            qWarning() << "[TorrentRepository] unusable hash, refusing to store" << t.hash;
-            continue;
-        }
-        // One id may leave this loop once. Both cases that reach here are silent
-        // corruption otherwise: the batch write has no per-row outcome, so the
-        // loser is neither stored nor reported, yet the statistics below count it.
-        const auto claimed = claimedBy.constFind(id);
-        if (claimed != claimedBy.constEnd()) {
-            // A hash repeated inside one dump batch is ordinary — same torrent,
-            // same row, nothing lost by writing it once.
-            if (!sameHash(*claimed, t.hash)) {
-                // A genuine 63-bit collision between two torrents that are both new
-                // to the index. Neither add() nor the caller's getMany() can catch
-                // this one: there is no stored row yet for either to compare against.
-                qWarning() << "[TorrentRepository] row id collision inside batch, refusing to store" << t.hash << "- id"
-                           << id << "already claimed by" << *claimed;
-            }
-            continue;
-        }
-        claimedBy.insert(id, t.hash);
-
-        torrentRows.append(torrentRow(t));
-        if (!t.fileList.isEmpty())
-            fileRows.append(filesRow(t.hash, t.fileList));
-        addedFiles += t.files;
-        addedSize += t.size;
+QVector<TorrentRepository::PersistItem> TorrentRepository::addManyConfirmed(const QVector<Torrent>& torrents)
+{
+    WriteGuard write(this);
+    QVector<PersistItem> result;
+    if (torrents.isEmpty()) return result;
+    if (statisticsDirty_) primeFromDatabase();
+    if (torrents.size() > 500) {
+        for (int offset = 0; offset < torrents.size(); offset += 500)
+            result += addManyConfirmed(torrents.mid(offset, 500));
+        return result;
     }
-    if (torrentRows.isEmpty())
-        return 0;
+    QStringList hashes;
+    for (const auto& t : torrents) hashes.append(t.hash.toLower());
+    QSet<QString> collided;
+    bool ok = false;
+    const auto stored = getMany(hashes, &collided, &ok);
+    QVector<QVariantMap> fileRows, summaryRows;
+    QHash<qint64, int> index;
+    QHash<qint64, QVariantMap> expectedFiles;
+    for (auto t : torrents) {
+        t.hash = t.hash.toLower();
+        const auto id = rowIdFromHash(t.hash);
+        PersistItem item; item.hash = t.hash; item.torrent = t; item.stage = "lookup";
+        if (!ok || statisticsDirty_) item.error = "Database lookup/statistics reconciliation failed";
+        else if (!t.isValid() || id == 0) { item.status = PersistStatus::Invalid; item.error = "Invalid hash"; }
+        else if (collided.contains(t.hash)) { item.status = PersistStatus::Collision; item.error = "Row id collision"; }
+        else if (stored.contains(t.hash)) {
+            item.torrent = stored.value(t.hash);
+            item.status = unconfirmedInserts_.remove(t.hash) ? PersistStatus::Inserted : PersistStatus::Existing;
+        } else if (index.contains(id)) {
+            item.status = result[index.value(id)].hash == t.hash ? PersistStatus::Duplicate : PersistStatus::Collision;
+            item.error = "Duplicate hash or row id inside batch";
+        } else {
+            unconfirmedInserts_.remove(t.hash); // absent after an earlier uncertain write
+            index.insert(id, result.size());
+            if (!t.fileList.isEmpty()) {
+                auto row = filesRow(t.hash, t.fileList); fileRows.append(row); expectedFiles.insert(id, row);
+            }
+        }
+        result.append(std::move(item));
+    }
+    if (unconfirmedInserts_.size() + index.size() > 10000) {
+        for (auto position : index) {
+            result[position].stage = "reconcile";
+            result[position].error = "Unconfirmed insertion receipt capacity reached";
+        }
+        return result;
+    }
+    const auto files = db_->replaceManyConfirmed(kFiles, fileRows);
+    QSet<qint64> confirmedFiles = files.confirmed;
+    if (!files.uncertain.isEmpty()) {
+        QVector<qint64> ids(files.uncertain.begin(), files.uncertain.end());
+        bool readOk = false;
+        const auto rows = db_->query(SelectQuery(kFiles).whereInIds("id", ids).limit(0, ids.size()).build(), {}, &readOk);
+        if (readOk) for (const auto& row : rows) {
+            const auto id = row.value("id").toLongLong(); const auto expected = expectedFiles.value(id);
+            if (sameHash(row.value("hash").toString(), expected.value("hash").toString())
+                && row.value("path").toString() == expected.value("path").toString()
+                && row.value("size").toString() == expected.value("size").toString()) confirmedFiles.insert(id);
+        }
+    }
+    for (auto it = index.cbegin(); it != index.cend(); ++it) {
+        auto& item = result[it.value()];
+        if (!item.torrent.fileList.isEmpty() && !confirmedFiles.contains(it.key())) {
+            item.stage = "files"; item.error = files.rejected.contains(it.key()) ? "File row exceeds SQL byte limit" : "File write unconfirmed";
+            item.retryable = !files.rejected.contains(it.key());
+        } else summaryRows.append(torrentRow(item.torrent));
+    }
+    const auto summaries = db_->replaceManyConfirmed(kTorrents, summaryRows);
+    QSet<qint64> confirmed = summaries.confirmed;
+    if (!summaries.uncertain.isEmpty()) {
+        QStringList uncertainHashes;
+        for (auto id : summaries.uncertain) uncertainHashes.append(result[index.value(id)].hash);
+        bool readOk = false;
+        const auto recovered = getMany(uncertainHashes, nullptr, &readOk);
+        for (auto id : summaries.uncertain) {
+            const auto hash = result[index.value(id)].hash;
+            if (readOk && recovered.contains(hash)) confirmed.insert(id);
+            else if (!readOk) { unconfirmedInserts_.insert(hash); statisticsDirty_ = true; }
+        }
+    }
+    qint64 added = 0, addedFiles = 0, addedSize = 0;
+    for (auto it = index.cbegin(); it != index.cend(); ++it) {
+        auto& item = result[it.value()];
+        if (confirmed.contains(it.key())) {
+            item.status = PersistStatus::Inserted; item.stage = "summary";
+            ++added; addedFiles += item.torrent.files; addedSize += item.torrent.size;
+        } else if (item.error.isEmpty()) {
+            item.stage = "summary"; item.error = summaries.rejected.contains(it.key()) ? "Summary exceeds SQL byte limit" : "Summary write unconfirmed";
+            item.retryable = !summaries.rejected.contains(it.key());
+        }
+    }
+    if (added || statisticsDirty_) bumpStatistics(added, addedFiles, addedSize);
+    return result;
+}
 
-    // REPLACE rather than INSERT: Manticore fails an entire multi-row INSERT on a
-    // single duplicate id, and an id already held in the index by *this* torrent
-    // (a re-import, a retried batch) is a duplicate. The loop above is what keeps
-    // a batch from carrying two rows with one id into this statement.
-    if (!db_->replaceMany(kTorrents, torrentRows))
-        return 0;
-    if (!fileRows.isEmpty())
-        db_->replaceMany(kFiles, fileRows);
-
-    bumpStatistics(torrentRows.size(), addedFiles, addedSize);
-    return torrentRows.size();
+QHash<QString, domain::HashState> TorrentRepository::checkMany(const QStringList& hashes)
+{
+    QHash<QString, domain::HashState> result;
+    if (hashes.size() > 500) {
+        for (int offset = 0; offset < hashes.size(); offset += 500) result.insert(checkMany(hashes.mid(offset, 500)));
+        return result;
+    }
+    bool ok = false;
+    QSet<QString> collided;
+    const auto stored = getMany(hashes, &collided, &ok);
+    QStringList details;
+    for (auto it = stored.cbegin(); it != stored.cend(); ++it) details.append(it.key());
+    bool filesOk = true;
+    const auto files = filesOf(details, &filesOk);
+    for (const auto& hash : hashes) {
+        auto state = domain::HashState::Failed;
+        if (ok) {
+            if (collided.contains(hash)) state = domain::HashState::Collision;
+            else if (!stored.contains(hash)) state = domain::HashState::Missing;
+            else if (filesOk) state = stored.value(hash).files > 0 && files.value(hash).size() >= stored.value(hash).files
+                ? domain::HashState::Known : domain::HashState::Incomplete;
+        }
+        result.insert(hash, state);
+    }
+    return result;
 }
 
 QVector<Torrent> TorrentRepository::pageAfterId(qint64 afterId, int limit)
@@ -675,8 +820,9 @@ QVector<File> TorrentRepository::filesOf(const QString& hash)
         rows.first().value(QStringLiteral("path")).toString(), rows.first().value(QStringLiteral("size")).toString());
 }
 
-QHash<QString, QVector<File>> TorrentRepository::filesOf(const QStringList& hashes)
+QHash<QString, QVector<File>> TorrentRepository::filesOf(const QStringList& hashes, bool* ok)
 {
+    if (ok) *ok = true;
     QHash<QString, QVector<File>> result;
     if (hashes.isEmpty())
         return result;
@@ -686,25 +832,29 @@ QHash<QString, QVector<File>> TorrentRepository::filesOf(const QStringList& hash
     // The LIMIT is not optional: Manticore returns 20 rows for a SELECT without
     // one, which would silently drop most of the batch.
     const QString sql = SelectQuery(kFiles).whereInIds(QStringLiteral("id"), ids).limit(0, ids.size()).build();
-    for (const auto& row : db_->query(sql)) {
+    bool queryOk = false;
+    const auto rows = db_->query(sql, {}, &queryOk);
+    if (ok) *ok = queryOk;
+    for (const auto& row : rows) {
         const QString hash = row.value(QStringLiteral("hash")).toString();
         if (!wantedMatches(wanted.value(row.value(QStringLiteral("id")).toLongLong()), hash))
             continue; // id collision
-        result[hash]
-            = parseFileBlob(row.value(QStringLiteral("path")).toString(), row.value(QStringLiteral("size")).toString());
+        for (const auto& want : wanted.value(row.value("id").toLongLong()))
+            if (sameHash(want, hash)) result[want] = parseFileBlob(row.value("path").toString(), row.value("size").toString());
     }
     return result;
 }
 
-void TorrentRepository::saveFiles(const QString& hash, const QVector<File>& files)
+bool TorrentRepository::saveFiles(const QString& hash, const QVector<File>& files)
 {
+    WriteGuard write(this);
     if (files.isEmpty())
-        return;
+        return false;
 
     // One statement: the files row carries the torrent's own id, so replacing it
     // in place is exact. The old delete + insert handed the row a fresh counter
     // id every time a file list was backfilled.
-    db_->replace(kFiles, filesRow(hash, files));
+    return db_->replace(kFiles, filesRow(hash, files));
 }
 
 // ---------------------------------------------------------------------------
@@ -713,6 +863,7 @@ void TorrentRepository::saveFiles(const QString& hash, const QVector<File>& file
 
 bool TorrentRepository::updateTrackerCounts(const QString& hash, int seeders, int leechers, int completed)
 {
+    WriteGuard write(this);
     const RowSlot slot = resolve(hash);
     if (!slot.taken || !slot.ours)
         return false;
@@ -724,6 +875,7 @@ bool TorrentRepository::updateTrackerCounts(const QString& hash, int seeders, in
 
 bool TorrentRepository::updateFiles(const QString& hash, const QVector<File>& files)
 {
+    WriteGuard write(this);
     if (files.isEmpty())
         return false;
 
@@ -738,18 +890,20 @@ bool TorrentRepository::updateFiles(const QString& hash, const QVector<File>& fi
         return false; // id collision
     const int oldCount = rows.first().value(QStringLiteral("files")).toInt();
 
-    saveFiles(hash, files); // replaces the file row for this hash
+    if (!saveFiles(hash, files))
+        return false;
 
     if (!db_->update(kTorrents, { { "files", files.size() } }, { { "id", id } }))
         return false;
 
     bumpStatistics(0, files.size() - oldCount, 0);
-    emit torrentUpdated(hash);
+    notify([this, hash] { emit torrentUpdated(hash); });
     return true;
 }
 
 bool TorrentRepository::mergeInfo(const QString& hash, const QJsonObject& info)
 {
+    WriteGuard write(this);
     // get() already refuses a collided row, so reaching here means the slot is
     // ours to write.
     const auto existing = get(hash);
@@ -764,6 +918,7 @@ bool TorrentRepository::mergeInfo(const QString& hash, const QJsonObject& info)
 
 bool TorrentRepository::updateClassification(const QString& hash, ContentType type, ContentCategory category)
 {
+    WriteGuard write(this);
     const RowSlot slot = resolve(hash);
     if (!slot.taken || !slot.ours)
         return false;
@@ -779,6 +934,7 @@ bool TorrentRepository::updateClassification(const QString& hash, ContentType ty
 TorrentRepository::RowIdMigrationPage TorrentRepository::migrateRowIdPage(
     const QString& table, qint64& cursor, int limit)
 {
+    WriteGuard write(this);
     RowIdMigrationPage page;
     const bool isTorrents = (table == kTorrents);
     // Where this page started. Every failure path below rewinds to it, so a

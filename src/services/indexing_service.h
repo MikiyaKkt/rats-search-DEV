@@ -23,6 +23,15 @@ class IndexingService : public QObject {
     Q_OBJECT
 
 public:
+    enum class Outcome { Inserted, Merged, Rejected, Invalid, Collision, Failed, Duplicate };
+    struct ItemResult {
+        QString hash;
+        Outcome outcome = Outcome::Failed;
+        QString stage;
+        QString error;
+        domain::Torrent torrent;
+        bool retryable = true; // Failed only: false for deterministic capacity/row rejection.
+    };
     struct Result {
         bool success = false;
         bool alreadyExists = false;
@@ -41,6 +50,21 @@ public:
         // a birthday collision — ~5e-6 across a 10M index. Storing such a
         // torrent would overwrite an unrelated one, so it is skipped instead.
         int collided = 0;
+        int failed = 0;
+        int duplicates = 0;
+        QVector<ItemResult> items;
+        void record(ItemResult item) {
+            switch (item.outcome) {
+            case Outcome::Inserted: ++inserted; break;
+            case Outcome::Merged: ++merged; break;
+            case Outcome::Rejected: ++rejected; break;
+            case Outcome::Invalid: ++invalid; break;
+            case Outcome::Collision: ++collided; break;
+            case Outcome::Failed: ++failed; break;
+            case Outcome::Duplicate: ++duplicates; break;
+            }
+            items.append(std::move(item));
+        }
     };
 
     struct BatchOptions {

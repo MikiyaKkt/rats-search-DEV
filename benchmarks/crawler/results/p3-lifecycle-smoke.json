@@ -1,0 +1,141 @@
+{
+    "crawler_running": true,
+    "dht_nodes_at_end": 0,
+    "end_snapshot": {
+        "counters": {
+            "db.main_query_calls": 2,
+            "db.query_calls": 2,
+            "db.query_ok": 2,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 3310.5286,
+        "enabled": true,
+        "gauges": {
+            "crawler.db_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_retry_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_state": {
+                "current": 2,
+                "peak": 2
+            },
+            "crawler.metadata_paused": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.notification_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.result_reservations": {
+                "current": 0,
+                "peak": 0
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 2,
+                "max": 12.4966,
+                "mean": 6.3858500000000005,
+                "p50": 0.2751,
+                "p95": 12.4966,
+                "retained": 2
+            },
+            "db.query_ms": {
+                "count": 2,
+                "max": 12.5141,
+                "mean": 6.395149999999999,
+                "p50": 0.2762,
+                "p95": 12.5141,
+                "retained": 2
+            },
+            "main.event_loop_drift_ms": {
+                "count": 14,
+                "max": 1.2795999999999879,
+                "mean": 0.261807142857143,
+                "p50": 0,
+                "p95": 1.2795999999999879,
+                "retained": 14
+            }
+        },
+        "schema": 1
+    },
+    "isolated_database": true,
+    "measurement_end_utc": "2026-11-21T01:27:49.777Z",
+    "measurement_seconds": 3,
+    "measurement_start_utc": "2026-11-21T01:27:46.790Z",
+    "peer_ingestion_disabled": true,
+    "replication": false,
+    "schema": 1,
+    "source": "fa5abc8",
+    "start_snapshot": {
+        "counters": {
+            "db.main_query_calls": 2,
+            "db.query_calls": 2,
+            "db.query_ok": 2,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 323.9209,
+        "enabled": true,
+        "gauges": {
+            "crawler.db_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_pending_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_retry_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.db_state": {
+                "current": 2,
+                "peak": 2
+            },
+            "crawler.metadata_paused": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.notification_pending": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.result_reservations": {
+                "current": 0,
+                "peak": 0
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 2,
+                "max": 12.4966,
+                "mean": 6.3858500000000005,
+                "p50": 0.2751,
+                "p95": 12.4966,
+                "retained": 2
+            },
+            "db.query_ms": {
+                "count": 2,
+                "max": 12.5141,
+                "mean": 6.395149999999999,
+                "p50": 0.2762,
+                "p95": 12.5141,
+                "retained": 2
+            }
+        },
+        "schema": 1
+    },
+    "trackers": false,
+    "utc": "2026-11-21T01:27:50Z",
+    "warmup_seconds": 0
+}

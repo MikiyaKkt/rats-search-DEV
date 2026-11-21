@@ -1,0 +1,341 @@
+﻿{
+    "schema":  1,
+    "generated_utc":  "2026-11-20T08:55:35.2095066Z",
+    "expected_runs":  3,
+    "notes":  [
+                  "Counter deltas exclude warmup.",
+                  "Sample percentiles are final recent windows, not full-window quantiles.",
+                  "Gauge extrema are sampled every five seconds and can miss intervening peaks.",
+                  "Resource samples exclude startup, warmup and shutdown; CPU coverage is reported separately.",
+                  "No completed metadata requests means ratios are null, not zero success rate."
+              ],
+    "runs":  [
+                 {
+                     "file":  "run-1-20261120-165441.json",
+                     "measurement_metrics_file":  "run-1-20261120-165441.metrics.jsonl",
+                     "source":  "fa5abc8",
+                     "warmup_seconds":  300,
+                     "requested_seconds":  900,
+                     "actual_seconds":  899.99799999999993,
+                     "measurement_start_utc":  "2026-11-20T07:59:41.617Z",
+                     "measurement_end_utc":  "2026-11-20T08:14:41.615Z",
+                     "counter_deltas":  {
+                                            "crawler.announcements":  2,
+                                            "crawler.candidates":  2,
+                                            "crawler.known_lookup_calls":  2,
+                                            "crawler.metadata_attempts":  2,
+                                            "crawler.metadata_failed":  2,
+                                            "crawler.metadata_queued":  2,
+                                            "crawler.metadata_timeouts":  2,
+                                            "db.main_query_calls":  2,
+                                            "db.query_calls":  2,
+                                            "db.query_ok":  2,
+                                            "db.rows_returned":  0
+                                        },
+                     "observed_announcements":  2,
+                     "metadata_attempts":  2,
+                     "metadata_succeeded":  0,
+                     "metadata_failed":  2,
+                     "crawler_inserted":  0,
+                     "crawler_inserted_per_minute":  0,
+                     "metadata_success_ratio":  0,
+                     "metadata_timeout_ratio":  1,
+                     "dht_nodes_at_end":  192,
+                     "periodic_snapshots":  180,
+                     "sampled_window_gauges":  {
+                                                   "crawler.announce_dispatch_estimated_bytes":  {
+                                                                                                     "min":  0,
+                                                                                                     "max":  0
+                                                                                                 },
+                                                   "crawler.announce_dispatch_pending":  {
+                                                                                             "min":  0,
+                                                                                             "max":  0
+                                                                                         },
+                                                   "crawler.legacy_active_fetches":  {
+                                                                                         "min":  0,
+                                                                                         "max":  1
+                                                                                     },
+                                                   "crawler.metadata_inflight":  {
+                                                                                     "min":  0,
+                                                                                     "max":  1
+                                                                                 },
+                                                   "crawler.metadata_queue_estimated_bytes":  {
+                                                                                                  "min":  0,
+                                                                                                  "max":  0
+                                                                                              },
+                                                   "crawler.metadata_queue_items":  {
+                                                                                        "min":  0,
+                                                                                        "max":  0
+                                                                                    },
+                                                   "crawler.metadata_queue_oldest_ms":  {
+                                                                                            "min":  0,
+                                                                                            "max":  0
+                                                                                        },
+                                                   "crawler.running":  {
+                                                                           "min":  1,
+                                                                           "max":  1
+                                                                       },
+                                                   "network.dht_nodes":  {
+                                                                             "min":  129,
+                                                                             "max":  192
+                                                                         }
+                                               },
+                     "final_recent_samples":  {
+                                                  "crawler.announce_dispatch_ms":  {
+                                                                                       "count":  2,
+                                                                                       "max":  0.4954,
+                                                                                       "mean":  0.3036,
+                                                                                       "p50":  0.1118,
+                                                                                       "p95":  0.4954,
+                                                                                       "retained":  2
+                                                                                   },
+                                                  "crawler.known_lookup_ms":  {
+                                                                                  "count":  2,
+                                                                                  "max":  0.4375,
+                                                                                  "mean":  0.41759999999999997,
+                                                                                  "p50":  0.3977,
+                                                                                  "p95":  0.4375,
+                                                                                  "retained":  2
+                                                                              },
+                                                  "crawler.metadata_fetch_ms":  {
+                                                                                    "count":  2,
+                                                                                    "max":  60013.1798,
+                                                                                    "mean":  60012.12055,
+                                                                                    "p50":  60011.0613,
+                                                                                    "p95":  60013.1798,
+                                                                                    "retained":  2
+                                                                                },
+                                                  "crawler.metadata_queue_wait_ms":  {
+                                                                                         "count":  2,
+                                                                                         "max":  79.4919,
+                                                                                         "mean":  71.7262,
+                                                                                         "p50":  63.9605,
+                                                                                         "p95":  79.4919,
+                                                                                         "retained":  2
+                                                                                     },
+                                                  "db.main_query_ms":  {
+                                                                           "count":  4,
+                                                                           "max":  1.5807,
+                                                                           "mean":  0.6581250000000001,
+                                                                           "p50":  0.3898,
+                                                                           "p95":  1.5807,
+                                                                           "retained":  4
+                                                                       },
+                                                  "db.query_ms":  {
+                                                                      "count":  4,
+                                                                      "max":  1.5911,
+                                                                      "mean":  0.66255,
+                                                                      "p50":  0.3922,
+                                                                      "p95":  1.5911,
+                                                                      "retained":  4
+                                                                  },
+                                                  "main.event_loop_drift_ms":  {
+                                                                                   "count":  6000,
+                                                                                   "max":  15.396299999999997,
+                                                                                   "mean":  0.6466264500000011,
+                                                                                   "p50":  0.06479999999999109,
+                                                                                   "p95":  2.3793000000000006,
+                                                                                   "retained":  1024
+                                                                               }
+                                              },
+                     "resource_scope":  "probe process only; excludes searchd; UTC-filtered measurement samples",
+                     "resource_sample_count":  895,
+                     "resource_covered_seconds":  899.1252032,
+                     "resource_max_gap_seconds":  1.0162821,
+                     "cpu_seconds_in_covered_window":  4.53125,
+                     "average_cpu_core_percent":  0.50396207156391726,
+                     "rss_median_bytes":  50278400,
+                     "rss_p95_bytes":  50618368,
+                     "rss_max_bytes":  50618368,
+                     "private_max_bytes":  22110208,
+                     "threads_min":  26,
+                     "threads_max":  29,
+                     "udp_address_error_10049_lines":  36,
+                     "diagnostic_scope":  "entire probe process, including warmup and shutdown; not measurement-window error rates"
+                 },
+                 {
+                     "file":  "run-2-20261120-171441.json",
+                     "measurement_metrics_file":  "run-2-20261120-171441.metrics.jsonl",
+                     "source":  "fa5abc8",
+                     "warmup_seconds":  300,
+                     "requested_seconds":  900,
+                     "actual_seconds":  899.99899999999991,
+                     "measurement_start_utc":  "2026-11-20T08:19:43.149Z",
+                     "measurement_end_utc":  "2026-11-20T08:34:43.148Z",
+                     "counter_deltas":  {
+                                            "db.main_query_calls":  0,
+                                            "db.query_calls":  0,
+                                            "db.query_ok":  0,
+                                            "db.rows_returned":  0
+                                        },
+                     "observed_announcements":  0,
+                     "metadata_attempts":  0,
+                     "metadata_succeeded":  0,
+                     "metadata_failed":  0,
+                     "crawler_inserted":  0,
+                     "crawler_inserted_per_minute":  0,
+                     "metadata_success_ratio":  null,
+                     "metadata_timeout_ratio":  null,
+                     "dht_nodes_at_end":  141,
+                     "periodic_snapshots":  180,
+                     "sampled_window_gauges":  {
+                                                   "crawler.legacy_active_fetches":  {
+                                                                                         "min":  0,
+                                                                                         "max":  0
+                                                                                     },
+                                                   "crawler.metadata_queue_estimated_bytes":  {
+                                                                                                  "min":  0,
+                                                                                                  "max":  0
+                                                                                              },
+                                                   "crawler.metadata_queue_items":  {
+                                                                                        "min":  0,
+                                                                                        "max":  0
+                                                                                    },
+                                                   "crawler.metadata_queue_oldest_ms":  {
+                                                                                            "min":  0,
+                                                                                            "max":  0
+                                                                                        },
+                                                   "crawler.running":  {
+                                                                           "min":  1,
+                                                                           "max":  1
+                                                                       },
+                                                   "network.dht_nodes":  {
+                                                                             "min":  83,
+                                                                             "max":  192
+                                                                         }
+                                               },
+                     "final_recent_samples":  {
+                                                  "db.main_query_ms":  {
+                                                                           "count":  2,
+                                                                           "max":  1.7335,
+                                                                           "mean":  0.9929,
+                                                                           "p50":  0.2523,
+                                                                           "p95":  1.7335,
+                                                                           "retained":  2
+                                                                       },
+                                                  "db.query_ms":  {
+                                                                      "count":  2,
+                                                                      "max":  1.7453,
+                                                                      "mean":  0.99925,
+                                                                      "p50":  0.2532,
+                                                                      "p95":  1.7453,
+                                                                      "retained":  2
+                                                                  },
+                                                  "main.event_loop_drift_ms":  {
+                                                                                   "count":  6000,
+                                                                                   "max":  10.632599999999996,
+                                                                                   "mean":  0.31720363333333357,
+                                                                                   "p50":  0.06450000000000955,
+                                                                                   "p95":  0.827699999999993,
+                                                                                   "retained":  1024
+                                                                               }
+                                              },
+                     "resource_scope":  "probe process only; excludes searchd; UTC-filtered measurement samples",
+                     "resource_sample_count":  895,
+                     "resource_covered_seconds":  898.67155089999994,
+                     "resource_max_gap_seconds":  1.0082195999999999,
+                     "cpu_seconds_in_covered_window":  5.296875,
+                     "average_cpu_core_percent":  0.589411670447929,
+                     "rss_median_bytes":  51171328,
+                     "rss_p95_bytes":  51290112,
+                     "rss_max_bytes":  51908608,
+                     "private_max_bytes":  21106688,
+                     "threads_min":  26,
+                     "threads_max":  28,
+                     "udp_address_error_10049_lines":  38,
+                     "diagnostic_scope":  "entire probe process, including warmup and shutdown; not measurement-window error rates"
+                 },
+                 {
+                     "file":  "run-3-20261120-173444.json",
+                     "measurement_metrics_file":  "run-3-20261120-173444.metrics.jsonl",
+                     "source":  "fa5abc8",
+                     "warmup_seconds":  300,
+                     "requested_seconds":  900,
+                     "actual_seconds":  900.002,
+                     "measurement_start_utc":  "2026-11-20T08:39:45.521Z",
+                     "measurement_end_utc":  "2026-11-20T08:54:45.523Z",
+                     "counter_deltas":  {
+                                            "db.main_query_calls":  34,
+                                            "db.query_calls":  34,
+                                            "db.query_ok":  34,
+                                            "db.rows_returned":  0
+                                        },
+                     "observed_announcements":  0,
+                     "metadata_attempts":  0,
+                     "metadata_succeeded":  0,
+                     "metadata_failed":  0,
+                     "crawler_inserted":  0,
+                     "crawler_inserted_per_minute":  0,
+                     "metadata_success_ratio":  null,
+                     "metadata_timeout_ratio":  null,
+                     "dht_nodes_at_end":  169,
+                     "periodic_snapshots":  180,
+                     "sampled_window_gauges":  {
+                                                   "crawler.legacy_active_fetches":  {
+                                                                                         "min":  0,
+                                                                                         "max":  0
+                                                                                     },
+                                                   "crawler.metadata_queue_estimated_bytes":  {
+                                                                                                  "min":  0,
+                                                                                                  "max":  0
+                                                                                              },
+                                                   "crawler.metadata_queue_items":  {
+                                                                                        "min":  0,
+                                                                                        "max":  0
+                                                                                    },
+                                                   "crawler.metadata_queue_oldest_ms":  {
+                                                                                            "min":  0,
+                                                                                            "max":  0
+                                                                                        },
+                                                   "crawler.running":  {
+                                                                           "min":  1,
+                                                                           "max":  1
+                                                                       },
+                                                   "network.dht_nodes":  {
+                                                                             "min":  72,
+                                                                             "max":  178
+                                                                         }
+                                               },
+                     "final_recent_samples":  {
+                                                  "db.main_query_ms":  {
+                                                                           "count":  36,
+                                                                           "max":  1.917,
+                                                                           "mean":  0.5453888888888889,
+                                                                           "p50":  0.4728,
+                                                                           "p95":  0.7239,
+                                                                           "retained":  36
+                                                                       },
+                                                  "db.query_ms":  {
+                                                                      "count":  36,
+                                                                      "max":  1.9305,
+                                                                      "mean":  0.5475027777777776,
+                                                                      "p50":  0.4754,
+                                                                      "p95":  0.7255,
+                                                                      "retained":  36
+                                                                  },
+                                                  "main.event_loop_drift_ms":  {
+                                                                                   "count":  5999,
+                                                                                   "max":  10.104399999999998,
+                                                                                   "mean":  0.20587251208534763,
+                                                                                   "p50":  0.060000000000002274,
+                                                                                   "p95":  0.6577000000000055,
+                                                                                   "retained":  1024
+                                                                               }
+                                              },
+                     "resource_scope":  "probe process only; excludes searchd; UTC-filtered measurement samples",
+                     "resource_sample_count":  895,
+                     "resource_covered_seconds":  898.62162949999993,
+                     "resource_max_gap_seconds":  1.0078951999999999,
+                     "cpu_seconds_in_covered_window":  5.28125,
+                     "average_cpu_core_percent":  0.58770564013004323,
+                     "rss_median_bytes":  50380800,
+                     "rss_p95_bytes":  50675712,
+                     "rss_max_bytes":  51113984,
+                     "private_max_bytes":  20692992,
+                     "threads_min":  26,
+                     "threads_max":  28,
+                     "udp_address_error_10049_lines":  43,
+                     "diagnostic_scope":  "entire probe process, including warmup and shutdown; not measurement-window error rates"
+                 }
+             ]
+}

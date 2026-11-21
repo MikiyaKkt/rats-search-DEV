@@ -1,0 +1,61 @@
+{
+  "phase": "P5",
+  "utc": "2026-11-21T07:36:31.209Z",
+  "entries": [
+    {
+      "source": "build-windows-x64/p5-two-hour-final/run.json",
+      "file": "controlled-run.json",
+      "sourceBytes": 703,
+      "archiveBytes": 703,
+      "sourceSha256": "f9c896fbff3cb0a565b6de87b233c36b43b1b8cee9ecbeb6be543ce8c8da113b",
+      "archiveSha256": "f9c896fbff3cb0a565b6de87b233c36b43b1b8cee9ecbeb6be543ce8c8da113b",
+      "roundTripVerified": true
+    },
+    {
+      "source": "build-windows-x64/p5-two-hour-final/controlled.json",
+      "file": "controlled.json",
+      "sourceBytes": 53965,
+      "archiveBytes": 53965,
+      "sourceSha256": "c41dae23797dbf5cfa5ecd5a7078ea2f571167cb82393109a7da4017f7c24df2",
+      "archiveSha256": "c41dae23797dbf5cfa5ecd5a7078ea2f571167cb82393109a7da4017f7c24df2",
+      "roundTripVerified": true
+    },
+    {
+      "source": "build-windows-x64/p5-two-hour-final/controlled.json.resources.jsonl",
+      "file": "controlled.resources.jsonl.gz",
+      "sourceBytes": 30420424,
+      "archiveBytes": 2411247,
+      "sourceSha256": "dedd675aff111ba4cc1742c01de27208f7304446ba9aea0dac023bbb265349e4",
+      "archiveSha256": "34518b79235cebbca8e226ebf7d035bd3298c98ff404582a8d34a145058d2566",
+      "roundTripVerified": true
+    },
+    {
+      "source": "build-windows-x64/p5-network-two-hour/run.json",
+      "file": "network-run.json",
+      "sourceBytes": 437,
+      "archiveBytes": 437,
+      "sourceSha256": "979b1b4a5eb0a26882d8eb2673637a6b6aaffd932bc5b6ccfa56a989ce6c5fc7",
+      "archiveSha256": "979b1b4a5eb0a26882d8eb2673637a6b6aaffd932bc5b6ccfa56a989ce6c5fc7",
+      "roundTripVerified": true
+    },
+    {
+      "source": "build-windows-x64/p5-network-two-hour/live.json",
+      "file": "network.json",
+      "sourceBytes": 368318,
+      "archiveBytes": 368318,
+      "sourceSha256": "fec12f3d25b01e1771627a21ea6fd77c00df9d85af505a8159c9a711f6a89945",
+      "archiveSha256": "fec12f3d25b01e1771627a21ea6fd77c00df9d85af505a8159c9a711f6a89945",
+      "roundTripVerified": true
+    },
+    {
+      "source": "build-windows-x64/p5-network-two-hour/live.json.resources.jsonl",
+      "file": "network.resources.jsonl.gz",
+      "sourceBytes": 1516662,
+      "archiveBytes": 55739,
+      "sourceSha256": "0059c808fc753cbf2d61c14417d819a0dbbc6608ad0491f78831ce34f0dd9c81",
+      "archiveSha256": "c613698e44da6291f88deb8079ed2bd00499312902eca79ea26b32ce89b9bc2f",
+      "roundTripVerified": true
+    }
+  ],
+  "scope": "Probe result JSON and streamed process resources only. Raw files remain in the build directory; diagnostic logs are excluded."
+}

@@ -9,6 +9,7 @@
 #include "domain/peer.h"
 #include "domain/torrent_codec.h"
 #include "net/librats_convert.h"
+#include "net/crawler.h"
 #include "net/p2p_transport.h"
 #include "net/torrent_engine.h"
 #include "peer/peer_api.h"
@@ -213,8 +214,12 @@ void peerLookup(ApiRouter* ctx, app::Application* app, const QString& peerId, co
 
     *conn = QObject::connect(
         peerApi, &peer::PeerApi::remoteTorrentReceived, ctx, [=](const QString& h, const QJsonObject& data) {
-            if (h == hash)
-                finish(true, data);
+            if (h == hash) {
+                const auto torrent = domain::codec::torrentFromJson(data);
+                const bool complete = !includeFiles
+                    || (!torrent.fileList.isEmpty() && torrent.fileList.size() >= torrent.files);
+                finish(complete, data);
+            }
         });
     QObject::connect(timer, &QTimer::timeout, ctx, [=]() { finish(false, {}); });
 
@@ -443,17 +448,17 @@ void ApiRouter::registerMethods()
 
         std::optional<domain::Torrent> torrent = app_->search()->get(hash, includeFiles);
 
-        // A file list was asked for but the local copy has none: this is a
-        // remote-only hit (search replies never carry files). Fetch the full
-        // torrent from the offering peer, then the DHT, before giving up.
-        const bool needRemoteFiles = includeFiles && (!torrent || torrent->fileList.isEmpty());
+        // A summary can exist without complete details. Repair missing or
+        // truncated lists through the offering peer, then the DHT.
+        const bool needRemoteFiles = includeFiles
+            && (!torrent || torrent->fileList.isEmpty() || torrent->fileList.size() < torrent->files);
         if (needRemoteFiles && !peerId.isEmpty()) {
             peerLookup(this, app_, peerId, hash, includeFiles, /*asArray*/ false, respond);
             return;
         }
 
-        if (!torrent) {
-            // Not indexed locally and no peer to ask: try the DHT.
+        if (!torrent || needRemoteFiles) {
+            // No complete local copy and no peer to ask: try the DHT.
             dhtLookup(this, app_, hash, includeFiles, /*asArray*/ false, respond);
             return;
         }
@@ -886,6 +891,9 @@ void ApiRouter::registerMethods()
         result["files"] = stats.files;
         result["size"] = stats.totalSize;
         result["peers"] = app_->transport() ? app_->transport()->peerCount() : 0;
+        if (const auto* crawler = app_->crawler()) result["crawler"] = QJsonObject{
+            {"running", crawler->isRunning()}, {"metadataConcurrency", crawler->metadataConcurrency()},
+            {"activeMetadata", crawler->activeMetadataFetches()}, {"waitingForCapacity", crawler->metadataBackpressured()}};
         respond(Result::success(result));
     });
 

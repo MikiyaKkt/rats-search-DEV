@@ -1,0 +1,141 @@
+{
+    "crawler_running": true,
+    "dht_nodes_at_end": 169,
+    "end_snapshot": {
+        "counters": {
+            "db.main_query_calls": 36,
+            "db.query_calls": 36,
+            "db.query_ok": 36,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 1200294.2141,
+        "enabled": true,
+        "gauges": {
+            "crawler.legacy_active_fetches": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_estimated_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_items": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_oldest_ms": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.running": {
+                "current": 1,
+                "peak": 1
+            },
+            "network.dht_nodes": {
+                "current": 168,
+                "peak": 178
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 36,
+                "max": 1.917,
+                "mean": 0.5453888888888889,
+                "p50": 0.4728,
+                "p95": 0.7239,
+                "retained": 36
+            },
+            "db.query_ms": {
+                "count": 36,
+                "max": 1.9305,
+                "mean": 0.5475027777777776,
+                "p50": 0.4754,
+                "p95": 0.7255,
+                "retained": 36
+            },
+            "main.event_loop_drift_ms": {
+                "count": 5999,
+                "max": 10.104399999999998,
+                "mean": 0.20587251208534763,
+                "p50": 0.060000000000002274,
+                "p95": 0.6577000000000055,
+                "retained": 1024
+            }
+        },
+        "schema": 1
+    },
+    "isolated_database": true,
+    "measurement_end_utc": "2026-11-20T08:54:45.523Z",
+    "measurement_seconds": 900,
+    "measurement_start_utc": "2026-11-20T08:39:45.521Z",
+    "peer_ingestion_disabled": true,
+    "replication": false,
+    "schema": 1,
+    "source": "fa5abc8",
+    "start_snapshot": {
+        "counters": {
+            "db.main_query_calls": 2,
+            "db.query_calls": 2,
+            "db.query_ok": 2,
+            "db.rows_returned": 1
+        },
+        "elapsed_ms": 300292.3492,
+        "enabled": true,
+        "gauges": {
+            "crawler.legacy_active_fetches": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_estimated_bytes": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_items": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.metadata_queue_oldest_ms": {
+                "current": 0,
+                "peak": 0
+            },
+            "crawler.running": {
+                "current": 1,
+                "peak": 1
+            },
+            "network.dht_nodes": {
+                "current": 78,
+                "peak": 128
+            }
+        },
+        "samples": {
+            "db.main_query_ms": {
+                "count": 2,
+                "max": 1.917,
+                "mean": 1.14165,
+                "p50": 0.3663,
+                "p95": 1.917,
+                "retained": 2
+            },
+            "db.query_ms": {
+                "count": 2,
+                "max": 1.9305,
+                "mean": 1.1491,
+                "p50": 0.3677,
+                "p95": 1.9305,
+                "retained": 2
+            },
+            "main.event_loop_drift_ms": {
+                "count": 1499,
+                "max": 8.236799999999988,
+                "mean": 0.2046509006004002,
+                "p50": 0.050299999999992906,
+                "p95": 0.7980000000000018,
+                "retained": 1024
+            }
+        },
+        "schema": 1
+    },
+    "trackers": false,
+    "utc": "2026-11-20T08:54:45Z",
+    "warmup_seconds": 300
+}

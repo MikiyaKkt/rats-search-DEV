@@ -46,6 +46,7 @@ class MigrationService : public QObject {
     Q_OBJECT
 
 public:
+    void shutdown();
     MigrationService(const QString& dataDirectory, data::Database* db, data::TorrentRepository* repository,
         app::ConfigStore* config, QObject* parent = nullptr);
     ~MigrationService();
@@ -169,6 +170,7 @@ private:
     Progress currentProgress_;
 
     QFuture<void> asyncFuture_;
+    quint64 generation_ = 0; // application thread; validates queued completions
     QTimer* progressSaveTimer_ = nullptr;
 };
 

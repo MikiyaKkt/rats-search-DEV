@@ -5,6 +5,7 @@
 
 #include <QRegularExpression>
 #include <QString>
+#include <QMutex>
 
 namespace rats::service {
 
@@ -28,13 +29,14 @@ public:
     explicit FilterPolicy(FilterSettings settings);
 
     void setSettings(FilterSettings settings);
-    const FilterSettings& settings() const { return settings_; }
+    FilterSettings settings() const { QMutexLocker lock(&mutex_); return settings_; }
 
     // Empty string = accepted; otherwise a human-readable rejection reason.
     QString rejectionReason(const domain::Torrent& torrent) const;
     bool accepts(const domain::Torrent& torrent) const { return rejectionReason(torrent).isEmpty(); }
 
 private:
+    mutable QMutex mutex_;
     QString checkFileCount(const domain::Torrent& t) const;
     QString checkSize(const domain::Torrent& t) const;
     QString checkAdult(const domain::Torrent& t) const;

@@ -1,4 +1,7 @@
 #include "app/config_store.h"
+#include "app/application.h"
+#include "net/crawler.h"
+#include "rest/api_router.h"
 
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -27,6 +30,9 @@ private slots:
     void languageAndDarkMode_haveDedicatedSignals();
     void uiFont_defaultsAndClamping();
     void saveThenLoad_roundTrips();
+    void spiderLimits_defaultsClampAndNotify();
+    void spiderLimits_legacyAndMalformedLoad();
+    void spiderLimits_apiAppliesToServicesAndStats();
 
 private:
     QTemporaryDir* dir_ = nullptr;
@@ -40,6 +46,60 @@ void TestConfigStore::init()
     QVERIFY(dir_->isValid());
     path_ = dir_->path() + "/rats.json";
     config_ = new ConfigStore(path_);
+}
+
+void TestConfigStore::spiderLimits_defaultsClampAndNotify()
+{
+    QCOMPARE(config_->spiderMetadataConcurrency(), 10);
+    QCOMPARE(config_->spiderPendingLimit(), 1000);
+    QCOMPARE(config_->spiderBatchSize(), 100);
+    QSignalSpy changed(config_, &ConfigStore::configChanged);
+    config_->setSpiderMetadataConcurrency(20);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(changed.first().first().toStringList(), QStringList{"spider.metadataConcurrency"});
+    config_->setSpiderMetadataConcurrency(1000); QCOMPARE(config_->spiderMetadataConcurrency(), 64);
+    changed.clear(); config_->setSpiderMetadataConcurrency(65); QCOMPARE(changed.count(), 0);
+    config_->setSpiderMetadataConcurrency(-5); QCOMPARE(config_->spiderMetadataConcurrency(), 1);
+    config_->setValue("spider.metadataConcurrency", "invalid"); QCOMPARE(config_->spiderMetadataConcurrency(), 10);
+    config_->setValue("spider.metadataConcurrency", 2.5); QCOMPARE(config_->spiderMetadataConcurrency(), 10);
+    config_->setValue("spider.metadataConcurrency", true); QCOMPARE(config_->spiderMetadataConcurrency(), 10);
+    changed.clear();
+    config_->fromJson({{"spider", QJsonObject{{"metadataConcurrency",40},{"pendingLimit",0},{"batchSize",500}}}});
+    QCOMPARE(changed.count(), 1); QCOMPARE(config_->spiderMetadataConcurrency(), 40);
+    QCOMPARE(config_->spiderPendingLimit(), 1); QCOMPARE(config_->spiderBatchSize(), 100);
+    QVERIFY(config_->save()); ConfigStore loaded(path_); QVERIFY(loaded.load());
+    QCOMPARE(loaded.spiderMetadataConcurrency(), 40); QCOMPARE(loaded.spiderPendingLimit(), 1);
+}
+
+void TestConfigStore::spiderLimits_legacyAndMalformedLoad()
+{
+    QFile file(path_); QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(R"({"spider":{"walkInterval":250}})"); file.close();
+    QVERIFY(config_->load()); QCOMPARE(config_->spiderWalkInterval(), 250);
+    QCOMPARE(config_->spiderMetadataConcurrency(), 10); QCOMPARE(config_->spiderBatchSize(), 100);
+    QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
+    file.write(R"({"spider":{"metadataConcurrency":"bad","pendingLimit":-10,"batchSize":2.5}})"); file.close();
+    QVERIFY(config_->load()); QCOMPARE(config_->spiderMetadataConcurrency(), 10);
+    QCOMPARE(config_->spiderPendingLimit(), 1); QCOMPARE(config_->spiderBatchSize(), 100);
+    QCOMPARE(config_->toJson()["spider"].toObject()["metadataConcurrency"].toInt(), 10);
+}
+
+void TestConfigStore::spiderLimits_apiAppliesToServicesAndStats()
+{
+    rats::app::Application::Options options;
+    options.dataDirectory = dir_->path() + "/application"; options.headless = true;
+    rats::app::Application application(options);
+    rats::rest::ApiRouter router(&application);
+    bool replied = false;
+    router.call("config.set", {{"spider.metadataConcurrency",20},{"spider.pendingLimit",200},{"spider.batchSize",20}},
+        [&](const rats::Result& result) { QVERIFY(result.ok()); replied = true; });
+    QVERIFY(replied); QCOMPARE(application.crawler()->metadataConcurrency(),20);
+    QJsonObject stats;
+    router.call("stats.get",{},[&](const rats::Result& result){QVERIFY(result.ok()); stats=result.data().toObject();});
+    QVERIFY(stats.contains("torrents"));
+    const auto crawler=stats["crawler"].toObject();
+    QCOMPARE(crawler["metadataConcurrency"].toInt(),20); QCOMPARE(crawler["activeMetadata"].toInt(),0);
+    QVERIFY(!crawler["running"].toBool()); QVERIFY(!crawler["waitingForCapacity"].toBool());
 }
 
 void TestConfigStore::cleanup()

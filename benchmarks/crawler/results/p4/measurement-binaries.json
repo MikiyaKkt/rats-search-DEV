@@ -1,0 +1,5 @@
+{
+  "p3Baseline": "78f0c7c46100504263aaf83d4d2b5e0de9a32d424672eea90cf5a0238bcc5de9",
+  "p4LiveAndWaiters": "d34a5e7e01035fda861c4881d96eafab1369555c61612ac5abcc937246aefd34",
+  "note": "Live and waiter sampling preceded the later stats.get crawler fields; controlled runs are repeated with the final build."
+}

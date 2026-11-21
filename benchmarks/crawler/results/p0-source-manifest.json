@@ -1,0 +1,118 @@
+﻿{
+    "branch":  "feat/crawler-p0-observability",
+    "head":  "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+    "dirty":  true,
+    "generated_utc":  "2026-11-20T07:51:33.1016128Z",
+    "files":  [
+                  {
+                      "path":  "CMakeLists.txt",
+                      "sha256":  "8c969cd158d43a2d5a94bafd4be4f156648c6f55366d33061dfc60b986e6d386"
+                  },
+                  {
+                      "path":  "tests/CMakeLists.txt",
+                      "sha256":  "f9567bfca01a98f5acac47e8c733cfcd2090f9733463f8075dc6ae18f82e9a52"
+                  },
+                  {
+                      "path":  "src/common/performance_metrics.cpp",
+                      "sha256":  "10942c52c8c072631ff0c144b82afab822962f177c351b94e1ea1c57c5d0fe8f"
+                  },
+                  {
+                      "path":  "src/common/performance_metrics.h",
+                      "sha256":  "cd2f7e708825f9f714bace98d19f9f3413b94c9e093a7490ed40d70a9fd988fb"
+                  },
+                  {
+                      "path":  "src/common/performance_reporter.cpp",
+                      "sha256":  "6bd3cf29823c6253c0e2b132bdc1c2bd667fd6450599b7497159867c29d092ae"
+                  },
+                  {
+                      "path":  "src/common/performance_reporter.h",
+                      "sha256":  "e7db4c54fc5c3a8f3c69f9178444446d21004028c00e41ca04ee6bcb736cceb1"
+                  },
+                  {
+                      "path":  "src/net/crawler.cpp",
+                      "sha256":  "5b2320e2dd85fe896aba4890b9af6ec62ad3d58bb75373eccd7c32a07ca03fb1"
+                  },
+                  {
+                      "path":  "src/net/crawler.h",
+                      "sha256":  "4ebfdb378de67b66145810624a3dfecd4a1cb08ae1883fbb490a8206546229f4"
+                  },
+                  {
+                      "path":  "src/data/database.cpp",
+                      "sha256":  "508c506d7ee5e898e16fa60244246b14bb221b53025e994b14ee9ee0e7ee212d"
+                  },
+                  {
+                      "path":  "src/data/torrent_repository.cpp",
+                      "sha256":  "7ccb18d6eb2b24c0d081cdc72be9a65534c77795133eb2cdb2932b4ff95efb43"
+                  },
+                  {
+                      "path":  "src/data/torrent_repository.h",
+                      "sha256":  "6648f625c4401d62b468a77c42b0c93c2ffc46ae66c489b58c36ddffd48124a8"
+                  },
+                  {
+                      "path":  "src/data/query.cpp",
+                      "sha256":  "7a6ce4f41c7939e691440bc9c9db728dabc9eebc42e95a5abbd9979e8393b2d8"
+                  },
+                  {
+                      "path":  "src/services/indexing_service.cpp",
+                      "sha256":  "7cdfdd20742025290130dd84742eee2b95d47c94cc9a2431d26f3e1e5c9fa072"
+                  },
+                  {
+                      "path":  "src/services/filter_policy.cpp",
+                      "sha256":  "45119eddc5886763a2ebc459ad2fa824b311c33825efa79d9c45a5d516e2a83e"
+                  },
+                  {
+                      "path":  "src/domain/content_classifier.cpp",
+                      "sha256":  "99dcd17ef5fa1994f5721e7d65b31ad0c0ec49861f7d2c27ba8590879fb2cf7f"
+                  },
+                  {
+                      "path":  "src/app/application.cpp",
+                      "sha256":  "fdd5f678310bdd28c0db8ba04ad5e212bd788f4670c8c6f4544b037ea4ef7834"
+                  },
+                  {
+                      "path":  "src/main.cpp",
+                      "sha256":  "0115789ffa7ec86ff61f7b583b1b28a01558a49687d4762cb877fb186a683c17"
+                  },
+                  {
+                      "path":  "benchmarks/crawler/crawler_benchmark.cpp",
+                      "sha256":  "97919b5abdadc27e06a12d8f2b8f72543e118002ef786d410485bc71f564393f"
+                  },
+                  {
+                      "path":  "benchmarks/crawler/crawler_live_probe.cpp",
+                      "sha256":  "186511391b176b79e0410fea1e2d7cce6afce6e5019b91a0bd12fcb2984f2c24"
+                  },
+                  {
+                      "path":  "benchmarks/crawler/run-live.ps1",
+                      "sha256":  "408a55e0541b1b2aa30249bb0545db2ffecb556afb48f7c6e4c142e71f4ecfb7"
+                  },
+                  {
+                      "path":  "tests/test_performance_metrics.cpp",
+                      "sha256":  "46739b6f2b436d590beaa65e3ba26913079cd29f34cdd2c80e8b82d6751f35ef"
+                  },
+                  {
+                      "path":  "tests/test_crawler_metrics.cpp",
+                      "sha256":  "a5295a77cb7fc9dcb5fe2ef2caf1df0610d8df397ebcab8143c989cac79bfe6f"
+                  },
+                  {
+                      "path":  "tests/test_manticore_queries.cpp",
+                      "sha256":  "6a12dd12b5b09796f9366ad0936390d079bba277b189a43da61ff159f9083813"
+                  }
+              ],
+    "binaries":  [
+                     {
+                         "path":  "build-windows-x64/tests/crawler_benchmark.exe",
+                         "sha256":  "a1618a83b0606b5fe17a41ab1f046097d821a51d19eadf358184b7b3be5d2e63"
+                     },
+                     {
+                         "path":  "build-windows-x64/tests/crawler_live_probe.exe",
+                         "sha256":  "2139eae1f18978fbace1e63795d0ee889505f71037010d0a2aa878ba845cdad3"
+                     },
+                     {
+                         "path":  "imports/win/x64/searchd.exe",
+                         "sha256":  "a37301e616b00a96b0d46d037b843362c8fba433e4550acc3fc0f735a2c8527a"
+                     },
+                     {
+                         "path":  ".tools/Qt/6.10.1/mingw_64/bin/libmysql.dll",
+                         "sha256":  "bb261237d96bda186d5553592fa762dc96e3c75463ddfcf57e0f97a5a07e0ff3"
+                     }
+                 ]
+}

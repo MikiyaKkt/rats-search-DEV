@@ -182,7 +182,7 @@ private:
     bool showAgreementDialog(); // Show EULA on first launch, returns true if accepted
 
     // Torrent detail / action helpers (used by multiple tabs)
-    void showTorrentDetails(const rats::domain::Torrent& torrent);
+    void showTorrentDetails(const rats::domain::Torrent& torrent, const QString& peerId = {});
     void openMagnetLink(const rats::domain::Torrent& torrent);
     void exportTorrentToFile(const rats::domain::Torrent& torrent);
     // A .torrent requested via exportTorrentToFile is ready: prompt for a save
@@ -261,6 +261,7 @@ private:
 
     // State
     QString currentSearchQuery_;
+    quint64 filesRequestId_ = 0;
     qint64 cachedTorrentCount_ = 0; // Local torrent count (from statistics)
     qint64 cachedRemoteTorrentCount_ = 0; // Sum of torrents advertised by peers
     // Last torrent selected in each non-search tab, so switching tabs can

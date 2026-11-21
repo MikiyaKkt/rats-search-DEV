@@ -4,7 +4,8 @@ param(
     [ValidateRange(1, 64)][int]$Jobs = 4,
     [switch]$SkipTests,
     [AllowEmptyString()][ValidatePattern('^[A-Za-z0-9-]*$')][string]$PackageSuffix = 's3-fix1',
-    [switch]$Offline
+    [switch]$Offline,
+    [switch]$Release
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -47,6 +48,10 @@ $previousPath = $env:PATH
 $previousPluginPath = $env:QT_PLUGIN_PATH
 Push-Location $repo
 try {
+    $packageVersion = if ($Release) { (Get-Content -LiteralPath VERSION -Raw).Trim() } else { '' }
+    if ($Release -and $packageVersion -notmatch '^\d+\.\d+\.\d+$') {
+        throw 'VERSION must contain a numeric major.minor.patch version.'
+    }
     # Do not update an existing submodule: it may contain local fixes.
     foreach ($module in @('src/librats', 'imports')) {
         $marker = if ($module -eq 'imports') { 'imports/win/x64/searchd.exe' } else { 'src/librats/CMakeLists.txt' }
@@ -144,12 +149,18 @@ try {
         if ($process.ExitCode -ne 0 -or $versionOutput -notmatch '^Rats Search ') {
             throw "Package startup failed (exit $($process.ExitCode)): $startupError"
         }
+        if ($Release -and $versionOutput -notmatch "^Rats Search $([regex]::Escape($packageVersion))(?:\s|$)") {
+            throw "Package executable version does not match VERSION: $versionOutput"
+        }
         Write-Host "Package startup verified: $versionOutput"
     } finally { $process.Dispose() }
     Copy-Item 'LICENSE' "$package/LICENSE.txt"
     $revision = (& git rev-parse --short HEAD).Trim()
     $info = [ordered]@{
-        builtAtUtc = [DateTime]::UtcNow.ToString('o'); revision = $revision; stage = 'S3-fix1-awaiting-human-validation'
+        builtAtUtc = [DateTime]::UtcNow.ToString('o'); revision = $revision
+        stage = if ($Release) { 'release' } elseif ($PackageSuffix) { "$PackageSuffix-awaiting-human-validation" } else { 'awaiting-human-validation' }
+        branch = (& git branch --show-current).Trim()
+        sourceModified = [bool](& git status --porcelain)
         libratsRevision = (& git -C src/librats rev-parse HEAD).Trim()
         libratsModified = [bool](& git -C src/librats status --porcelain)
         qt = $qtVersion; compiler = 'MinGW 13.1 x64'; configuration = 'Release'; testsRun = (-not $SkipTests)
@@ -164,7 +175,7 @@ Qt is dynamically linked. Qt sources and license information:
   https://download.qt.io/archive/qt/6.10/6.10.1/
   https://www.qt.io/licensing/open-source-lgpl-obligations
 '@ | Set-Content "$package/README-portable.txt" -Encoding UTF8
-    $packageName = 'RatsSearch-Windows-x64' + $(if ($PackageSuffix) { "-$PackageSuffix" } else { '' }) + '.zip'
+    $packageName = 'RatsSearch-Windows-x64' + $(if ($Release) { "-v$packageVersion" } elseif ($PackageSuffix) { "-$PackageSuffix" } else { '' }) + '.zip'
     $zip = Join-Path $dist $packageName
     Compress-Archive -LiteralPath $package -DestinationPath $zip -Force -CompressionLevel Optimal
     if (-not $SkipTests) {

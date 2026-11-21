@@ -1,0 +1,88 @@
+{
+  "phase": "P5",
+  "utc": "2026-11-21T07:37:04.028Z",
+  "branch": "feat/crawler-p0-observability",
+  "baseRevision": "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+  "sourceModified": true,
+  "platform": "Windows x64",
+  "qt": "6.10.1",
+  "compiler": "MinGW GCC 13.1",
+  "manticore": "17.5.1",
+  "fullSuite": {
+    "passed": 31,
+    "failed": 0,
+    "wallSeconds": 126.67,
+    "log": "build-windows-x64/p5-full-tests.log",
+    "sha256": "d24dda4c817936ca9c6d21b74d213d0870def2c9b97824ad6a7c8bd200db18c2"
+  },
+  "liveDaemonRestart": {
+    "passed": true,
+    "qtTestCases": 35,
+    "log": "build-windows-x64/p5-reconnect-tests.log"
+  },
+  "longSoak": {
+    "summary": "benchmarks/crawler/results/p5-soak-summary.json",
+    "sha256": "b61ec329f03f28a6ca3c951542716b2b30c6c424ea10def7592a4ed346cff8cf",
+    "wallClock": true,
+    "secondsPerProbe": 7200,
+    "restartCyclesPerProbe": 100,
+    "allCapacityDrained": true,
+    "connectionsAfterStop": 0,
+    "controlledRows": 53875,
+    "controlledNotifications": 53867,
+    "liveAnnouncements": 4,
+    "liveMetadataAttempts": 4,
+    "liveInserted": 1,
+    "networkExecution": "outside restricted sandbox; explicitly approved"
+  },
+  "archive": {
+    "index": "benchmarks/crawler/results/p5/archive.json",
+    "sha256": "2fbde3f18bcf1e572eff5b66df014e4331cb3a39540331c0d0312e7239671bbc",
+    "roundTripVerified": true,
+    "diagnosticLogsIncluded": false
+  },
+  "excludedAttempt": {
+    "directory": "build-windows-x64/p5-two-hour",
+    "cancelled": true,
+    "countedAsPassed": false,
+    "reason": "Stopped after about 11 minutes to fix late-announcement cleanup; final two-hour run restarted from zero."
+  },
+  "shortEnvironmentCheck": {
+    "directory": "build-windows-x64/p5-network-environment-check.json",
+    "seconds": 10,
+    "dhtNodes": 67,
+    "description": "Same live snapshot reached public DHT outside sandbox; restricted long run ended with zero DHT nodes."
+  },
+  "defaults": {
+    "metadataConcurrency": 10,
+    "pendingLimit": 1000,
+    "batchSize": 100,
+    "estimatedByteBudget": 67108864
+  },
+  "performanceConclusion": "No general public-network speedup claim; controlled and network resources have different traffic.",
+  "sourceSha256": {
+    "src/common/crawler_timing.h": "81f550dfc1091aba09f100e4a8331eb7469fb19968b18ea3c4d0783ae2baa36a",
+    "src/net/crawler.cpp": "341d19e15fee8f485a3380ce6664a1cfc63ff3cf07ccd6efc78a79beacb6e4f0",
+    "src/net/crawler.h": "60490f62b3b48f531c82ee2ee412ddf42d5afc96b5ce9a7725f4160eea1bd2de",
+    "src/services/crawler_pipeline.cpp": "c0cc63ce873a1abbed133967a93cec564c0797bbfe3ce54ddfd526d9e9ba9426",
+    "src/services/crawler_pipeline.h": "c5cd429b331ad31bb3267c58b91a78cbc6718e2f2f793828e78eeae94bdd0770",
+    "src/data/manticore.cpp": "512f76f99734c2dabb5a59dc0365cf7de92c635e0e91ed7695a3c56ae622b2e4",
+    "tests/CMakeLists.txt": "90cf9831708c3fa7bccf516186cdfb74747e41c533d865c6f5361221b7184861",
+    "tests/test_crawler_pipeline.cpp": "b9fa2dd545ce869ea8433abe80472a732c53730433cba9a60cdf1177eeedf1f3",
+    "tests/test_crawler_metrics.cpp": "35cb00431bab24fe331ec8d4c589a7f0c8afe85beaa031f2ae08182a260f14ce",
+    "tests/test_crawler_batch_indexing.cpp": "a3a4b4084c0365aa2be62c3e0813f3c30b7c277c7c2932db13b39cbdd6073063",
+    "tests/test_manticore_queries.cpp": "21998319504255e1a5fbbe18d2137118b2620ef4d1d871c5e143ccdf4c17c820",
+    "benchmarks/crawler/crawler_soak_probe.cpp": "c8cd2f5a6544a40ec34f9349c1b13657e3560b8eb18389e6ea5b4181eb5a477c",
+    "benchmarks/crawler/crawler_live_probe.cpp": "e890451d87ee29c243ec10208a121b01f4f678852b042e3f9d21ea6fb6354512",
+    "benchmarks/crawler/run-soak.ps1": "774dbc0daea8e42db4e6b61611e6b9859f6b7772f888b6f4983046c93080f4e2",
+    "benchmarks/crawler/run-network-soak.ps1": "26eb253528a8bc2c05a0beefc3f47d51a97157977c9a4c418237cfd2d3740601",
+    "benchmarks/crawler/summarize-soak.cjs": "715ced8354eb2da0b30786b85937a2eba4c3191327217c66498c2e58f3485a4b",
+    "benchmarks/crawler/archive-soak.cjs": "a8b9d166603114ca9d6efbecaf4721ef0de0c4d409e3335aa7d3a13e8b4913cc"
+  },
+  "binarySha256": {
+    "build-windows-x64/bin/RatsSearch.exe": "60bb5a00b7a8e1d9888994e10e5bc827329500ae0d495190ff670c01a14dedc2",
+    "build-windows-x64/tests/crawler_soak_probe.exe": "d45f8669ff14848c3cf6a915876eb1b059ef37253b34fcff8c4b6bb46dc97180",
+    "build-windows-x64/tests/crawler_live_probe.exe": "8b98d5c6fb7b3021e610f9659cf06c1a3ab095d7a64496708cc2fcd06bce2bc8",
+    "build-windows-x64/tests/test_manticore_queries.exe": "c78ce4912d2cf7cc3fd07997d86e76e5325354efcbdadd253da0e1a5122bb507"
+  }
+}

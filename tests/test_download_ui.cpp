@@ -1,6 +1,7 @@
 #include "download_test_support.h"
 #include "ui/taskdownloaddialog.h"
 #include "ui/downloadadvancedwidgets.h"
+#include "ui/torrentfileswidget.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -16,6 +17,23 @@ using namespace download_test;
 class TestDownloadUi:public QObject {
     Q_OBJECT
 private slots:
+    void filePanelClearsCountAndPreservesAllPaths() {
+        TorrentFilesWidget widget;
+        widget.setFiles(QString(40, 'a'), "collection",
+            { { "folder/one.txt", 1 }, { "folder/sub/two.txt", 2 }, { "three.txt", 3 } });
+        QVERIFY(widget.hasCompleteFiles(3));
+        QVERIFY(!widget.hasCompleteFiles(4));
+        auto* tree = widget.findChild<QTreeWidget*>();
+        QVERIFY(tree);
+        int leaves = 0;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->childCount() == 0) ++leaves;
+        QCOMPARE(leaves, 3);
+        widget.clear();
+        QVERIFY(!widget.hasFiles());
+        QVERIFY(!widget.hasCompleteFiles(3));
+        QCOMPARE(tree->topLevelItemCount(), 0);
+    }
     void allDownloadSettingsHaveCompiledTranslations() {
         QMap<QString,QString> sections;
         auto read=[](const QString& relative){QFile file(QStringLiteral(RATS_SOURCE_DIR)+"/"+relative);if(!file.open(QIODevice::ReadOnly))qFatal("Missing UI source");return QString::fromUtf8(file.readAll());};

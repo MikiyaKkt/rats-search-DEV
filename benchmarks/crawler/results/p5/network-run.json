@@ -1,0 +1,13 @@
+{
+  "kind": "network-only",
+  "started_utc": "2026-11-21T05:35:26.2625368Z",
+  "seconds": 7200,
+  "cycles": 100,
+  "live_sha256": "8b98d5c6fb7b3021e610f9659cf06c1a3ab095d7a64496708cc2fcd06bce2bc8",
+  "live": "E:\\Project\\rats-search-dev\\build-windows-x64\\p5-network-two-hour\\live.json",
+  "completed": true,
+  "live_pid": 15364,
+  "ended_utc": "2026-11-21T07:35:28.4502792Z",
+  "live_exit_code": 0,
+  "cancelled": false
+}

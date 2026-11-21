@@ -1,0 +1,512 @@
+{
+  "phase": "P4",
+  "controlled": [
+    {
+      "concurrency": 10,
+      "runs": [
+        {
+          "file": "controlled-10-1.json",
+          "elapsedSeconds": 3.9811587,
+          "insertedPerMinute": 4521.2967772422635,
+          "actualMetadataPeak": 10,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3790.2335,
+          "metadataQueueP95Ms": 3162.634,
+          "metadataFetchP95Ms": 66.2994,
+          "taskP95Ms": 624.571,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 41985340,
+          "notificationItemsPeak": 50,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22360064,
+          "peakPrivateBytes": 8519680,
+          "cpuCorePercent": 70.64526214441037,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-10-2.json",
+          "elapsedSeconds": 4.0353093,
+          "insertedPerMinute": 4460.624616804467,
+          "actualMetadataPeak": 10,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3841.2189,
+          "metadataQueueP95Ms": 3162.4671,
+          "metadataFetchP95Ms": 68.5657,
+          "taskP95Ms": 680.4465,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 41989570,
+          "notificationItemsPeak": 50,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22355968,
+          "peakPrivateBytes": 8503296,
+          "cpuCorePercent": 72.02050162548879,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-10-3.json",
+          "elapsedSeconds": 3.9965872,
+          "insertedPerMinute": 4503.842678573359,
+          "actualMetadataPeak": 10,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3801.5792,
+          "metadataQueueP95Ms": 3160.5675,
+          "metadataFetchP95Ms": 70.4637,
+          "taskP95Ms": 637.5856,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 41985340,
+          "notificationItemsPeak": 50,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22319104,
+          "peakPrivateBytes": 8470528,
+          "cpuCorePercent": 71.93637611610225,
+          "networkBandwidth": null
+        }
+      ],
+      "insertedPerMinute": {
+        "min": 4460.624616804467,
+        "max": 4521.2967772422635
+      },
+      "endToEndP95Ms": {
+        "min": 3790.2335,
+        "max": 3841.2189
+      },
+      "actualMetadataPeak": {
+        "min": 10,
+        "max": 10
+      },
+      "peakThreads": {
+        "min": 8,
+        "max": 8
+      },
+      "peakWorkingSetBytes": {
+        "min": 22319104,
+        "max": 22360064
+      },
+      "cpuCorePercent": {
+        "min": 70.64526214441037,
+        "max": 72.02050162548879
+      }
+    },
+    {
+      "concurrency": 20,
+      "runs": [
+        {
+          "file": "controlled-20-1.json",
+          "elapsedSeconds": 3.9700938,
+          "insertedPerMinute": 4533.897914452298,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3767.4023,
+          "metadataQueueP95Ms": 2388.5071,
+          "metadataFetchP95Ms": 61.9583,
+          "taskP95Ms": 1311.3346,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54615628,
+          "notificationItemsPeak": 109,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22528000,
+          "peakPrivateBytes": 8695808,
+          "cpuCorePercent": 72.41642502250198,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-20-2.json",
+          "elapsedSeconds": 3.9723094,
+          "insertedPerMinute": 4531.36908217673,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3778.7588,
+          "metadataQueueP95Ms": 2403.4311,
+          "metadataFetchP95Ms": 66.5403,
+          "taskP95Ms": 1311.8338,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54615628,
+          "notificationItemsPeak": 109,
+          "peakThreads": 9,
+          "peakWorkingSetBytes": 22532096,
+          "peakPrivateBytes": 8790016,
+          "cpuCorePercent": 74.73612201506761,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-20-3.json",
+          "elapsedSeconds": 4.2511254,
+          "insertedPerMinute": 4234.172908660845,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 4047.9529,
+          "metadataQueueP95Ms": 2539.9753,
+          "metadataFetchP95Ms": 83.4609,
+          "taskP95Ms": 1445.2736,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54628318,
+          "notificationItemsPeak": 124,
+          "peakThreads": 9,
+          "peakWorkingSetBytes": 22523904,
+          "peakPrivateBytes": 8687616,
+          "cpuCorePercent": 77.9205431107725,
+          "networkBandwidth": null
+        }
+      ],
+      "insertedPerMinute": {
+        "min": 4234.172908660845,
+        "max": 4533.897914452298
+      },
+      "endToEndP95Ms": {
+        "min": 3767.4023,
+        "max": 4047.9529
+      },
+      "actualMetadataPeak": {
+        "min": 13,
+        "max": 13
+      },
+      "peakThreads": {
+        "min": 8,
+        "max": 9
+      },
+      "peakWorkingSetBytes": {
+        "min": 22523904,
+        "max": 22532096
+      },
+      "cpuCorePercent": {
+        "min": 72.41642502250198,
+        "max": 77.9205431107725
+      }
+    },
+    {
+      "concurrency": 40,
+      "runs": [
+        {
+          "file": "controlled-40-1.json",
+          "elapsedSeconds": 4.865116,
+          "insertedPerMinute": 3699.8090076372278,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 4605.9169,
+          "metadataQueueP95Ms": 2535.7182,
+          "metadataFetchP95Ms": 103.8191,
+          "taskP95Ms": 2028.9094,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54645238,
+          "notificationItemsPeak": 144,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22458368,
+          "peakPrivateBytes": 8617984,
+          "cpuCorePercent": 77.40051830213298,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-40-2.json",
+          "elapsedSeconds": 3.9852552,
+          "insertedPerMinute": 4516.649272548468,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3786.4591,
+          "metadataQueueP95Ms": 2405.3144,
+          "metadataFetchP95Ms": 65.7879,
+          "taskP95Ms": 1307.4764,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54615628,
+          "notificationItemsPeak": 109,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22441984,
+          "peakPrivateBytes": 8638464,
+          "cpuCorePercent": 73.70920687839514,
+          "networkBandwidth": null
+        },
+        {
+          "file": "controlled-40-3.json",
+          "elapsedSeconds": 3.9746023,
+          "insertedPerMinute": 4528.754990153355,
+          "actualMetadataPeak": 13,
+          "metadataSuccessRate": 1,
+          "endToEndP95Ms": 3788.4423,
+          "metadataQueueP95Ms": 2387.2327,
+          "metadataFetchP95Ms": 98.4469,
+          "taskP95Ms": 1333.0169,
+          "queueItemsPeak": 300,
+          "pendingItemsPeak": 300,
+          "pendingEstimatedBytesPeak": 54615628,
+          "notificationItemsPeak": 109,
+          "peakThreads": 8,
+          "peakWorkingSetBytes": 22474752,
+          "peakPrivateBytes": 8650752,
+          "cpuCorePercent": 68.00994907087937,
+          "networkBandwidth": null
+        }
+      ],
+      "insertedPerMinute": {
+        "min": 3699.8090076372278,
+        "max": 4528.754990153355
+      },
+      "endToEndP95Ms": {
+        "min": 3786.4591,
+        "max": 4605.9169
+      },
+      "actualMetadataPeak": {
+        "min": 13,
+        "max": 13
+      },
+      "peakThreads": {
+        "min": 8,
+        "max": 8
+      },
+      "peakWorkingSetBytes": {
+        "min": 22441984,
+        "max": 22474752
+      },
+      "cpuCorePercent": {
+        "min": 68.00994907087937,
+        "max": 77.40051830213298
+      }
+    }
+  ],
+  "live": [
+    {
+      "file": "live-p3-10-1.json",
+      "variant": "p3-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 29564928,
+      "peakPrivateBytes": 11706368,
+      "cpuCorePercent": 2.1979954281695093,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p3-10-2.json",
+      "variant": "p3-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25444352,
+      "peakPrivateBytes": 11542528,
+      "cpuCorePercent": 2.0609572263048803,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p3-10-3.json",
+      "variant": "p3-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25395200,
+      "peakPrivateBytes": 11558912,
+      "cpuCorePercent": 1.8372376989869756,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-10-1.json",
+      "variant": "p4-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25595904,
+      "peakPrivateBytes": 11665408,
+      "cpuCorePercent": 44.11468136595859,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-10-2.json",
+      "variant": "p4-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25526272,
+      "peakPrivateBytes": 11632640,
+      "cpuCorePercent": 41.96978175713487,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-10-3.json",
+      "variant": "p4-10",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 26271744,
+      "peakPrivateBytes": 12451840,
+      "cpuCorePercent": 42.1313714951178,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-20-1.json",
+      "variant": "p4-20",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25513984,
+      "peakPrivateBytes": 11640832,
+      "cpuCorePercent": 40.59532341874216,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-20-2.json",
+      "variant": "p4-20",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25976832,
+      "peakPrivateBytes": 12152832,
+      "cpuCorePercent": 40.618623014816784,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-20-3.json",
+      "variant": "p4-20",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 26324992,
+      "peakPrivateBytes": 12476416,
+      "cpuCorePercent": 44.60920569113352,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-40-1.json",
+      "variant": "p4-40",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 32,
+      "peakWorkingSetBytes": 26284032,
+      "peakPrivateBytes": 12500992,
+      "cpuCorePercent": 47.65763454901595,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-40-2.json",
+      "variant": "p4-40",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 25497600,
+      "peakPrivateBytes": 11657216,
+      "cpuCorePercent": 38.44829883627965,
+      "networkBandwidth": null
+    },
+    {
+      "file": "live-p4-40-3.json",
+      "variant": "p4-40",
+      "seconds": 10,
+      "dhtNodes": 0,
+      "announcements": 0,
+      "attempts": 0,
+      "successes": 0,
+      "inserted": 0,
+      "networkSuccessRate": null,
+      "peakThreads": 31,
+      "peakWorkingSetBytes": 26263552,
+      "peakPrivateBytes": 12414976,
+      "cpuCorePercent": 39.52926624346527,
+      "networkBandwidth": null
+    }
+  ],
+  "waiters": [
+    {
+      "file": "waiters-10.json",
+      "count": 10,
+      "callbacks": 10,
+      "baselineThreads": 30,
+      "finalThreads": 30,
+      "peakThreads": 40,
+      "peakWorkingSetBytes": 25931776,
+      "peakPrivateBytes": 11948032,
+      "cpuCorePercent": 41.79739101717305
+    },
+    {
+      "file": "waiters-20.json",
+      "count": 20,
+      "callbacks": 20,
+      "baselineThreads": 30,
+      "finalThreads": 30,
+      "peakThreads": 50,
+      "peakWorkingSetBytes": 26464256,
+      "peakPrivateBytes": 12636160,
+      "cpuCorePercent": 44.68688362919132
+    },
+    {
+      "file": "waiters-40.json",
+      "count": 40,
+      "callbacks": 40,
+      "baselineThreads": 30,
+      "finalThreads": 30,
+      "peakThreads": 70,
+      "peakWorkingSetBytes": 27242496,
+      "peakPrivateBytes": 13742080,
+      "cpuCorePercent": 43.25972313777192
+    }
+  ],
+  "defaultConcurrency": 10,
+  "tested64": false,
+  "networkBandwidthMeasured": false,
+  "networkConclusion": "No metadata requests; live throughput/success/latency cannot be compared",
+  "resourcesScope": "Probe process only; no searchd, system memory, or wire bandwidth; CPU percent is percent of one logical core",
+  "caveats": [
+    "Synthetic successful metadata does not represent real network reliability or bandwidth.",
+    "P3 baseline has external resource sampling; P4 live also has internal sampling. Do not attribute resource differences to concurrency alone.",
+    "64 was not tested because 20/40 show no stable delivered-throughput benefit; fixed result reservations limit simultaneous unfinished requests.",
+    "Watcher profiling invokes the library directly and does not pass through crawler admission. It measures thread shape, not production crawler capacity."
+  ]
+}

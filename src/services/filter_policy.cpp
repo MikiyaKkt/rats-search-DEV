@@ -13,6 +13,7 @@ FilterPolicy::FilterPolicy(FilterSettings settings) : settings_(std::move(settin
 
 void FilterPolicy::setSettings(FilterSettings settings)
 {
+    QMutexLocker lock(&mutex_);
     settings_ = std::move(settings);
     compileNamingRegex();
 }
@@ -28,6 +29,7 @@ void FilterPolicy::compileNamingRegex()
 
 QString FilterPolicy::rejectionReason(const domain::Torrent& t) const
 {
+    QMutexLocker lock(&mutex_);
     if (QString r = checkFileCount(t); !r.isEmpty())
         return r;
     if (QString r = checkSize(t); !r.isEmpty())

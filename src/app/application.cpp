@@ -5,6 +5,8 @@
 #include "app/search_history_store.h"
 #include "app/translation_manager.h"
 #include "common/logging.h"
+#include "common/performance_metrics.h"
+#include "common/performance_reporter.h"
 #include "data/database.h"
 #include "data/feed_repository.h"
 #include "data/manticore.h"
@@ -23,6 +25,7 @@
 #include "services/feed_service.h"
 #include "services/filter_policy.h"
 #include "services/indexing_service.h"
+#include "services/crawler_pipeline.h"
 #include "services/migration_service.h"
 #include "services/p2p_store.h"
 #include "services/peer_registry.h"
@@ -42,6 +45,7 @@ namespace rats::app {
 using namespace rats;
 
 struct Application::Private {
+    std::unique_ptr<common::PerformanceReporter> metrics;
     Application::Options options;
     bool running = false;
 
@@ -63,6 +67,7 @@ struct Application::Private {
     // Services
     std::unique_ptr<service::FilterPolicy> filter;
     std::unique_ptr<service::IndexingService> indexing;
+    std::unique_ptr<service::CrawlerPipeline> crawlerPipeline;
     std::unique_ptr<service::SearchService> search;
     std::unique_ptr<service::PeerRegistry> peers;
     std::unique_ptr<service::DownloadService> downloads;
@@ -121,12 +126,19 @@ Application::Application(Options options, QObject* parent) : QObject(parent), d_
     d_->transport = std::make_unique<net::P2PTransport>(p2pPort, dhtPort, dataDir, maxPeers);
     d_->engine = std::make_unique<net::TorrentEngine>(d_->transport.get());
     d_->crawler = std::make_unique<net::Crawler>(d_->transport.get());
+    d_->metrics = std::make_unique<common::PerformanceReporter>();
+    connect(d_->metrics.get(), &common::PerformanceReporter::beforeSnapshot,
+        d_->crawler.get(), &net::Crawler::refreshMetrics);
+    connect(d_->metrics.get(), &common::PerformanceReporter::beforeSnapshot, this, [this] {
+        common::PerformanceMetrics::instance().gauge(QStringLiteral("network.dht_nodes"), d_->transport->dhtNodeCount());
+    });
     d_->swarmScraper = std::make_unique<net::SwarmScraper>();
     d_->siteScraper = std::make_unique<net::TrackerSiteScraper>();
 
     // --- Services ---------------------------------------------------------
     d_->filter = std::make_unique<service::FilterPolicy>();
     d_->indexing = std::make_unique<service::IndexingService>(d_->torrents.get(), d_->filter.get());
+    d_->crawlerPipeline = std::make_unique<service::CrawlerPipeline>(d_->torrents.get(), d_->manticore.get());
     d_->search = std::make_unique<service::SearchService>(d_->torrents.get());
     d_->peers = std::make_unique<service::PeerRegistry>(d_->transport.get(), d_->options.clientVersion);
     d_->downloads = std::make_unique<service::DownloadService>(d_->engine.get());
@@ -165,6 +177,7 @@ void Application::applyConfig()
     ConfigStore* c = d_->config.get();
 
     d_->filter->setSettings(c->filterSettings());
+    d_->crawlerPipeline->setFilterSettings(c->filterSettings());
 
     d_->downloads->setDefaultDownloadPath(c->downloadPath());
     d_->downloads->setPolicyPersistence([this](const service::GlobalDownloadPolicy& p) { return d_->config->setDownloadPolicy(p); });
@@ -188,6 +201,8 @@ void Application::applyConfig()
     d_->transport->setHolePunchEnabled(c->holePunchEnabled());
     d_->transport->setRelayEnabled(c->relayEnabled());
     d_->transport->setRelayServeEnabled(c->relayServeEnabled());
+    d_->crawlerPipeline->configure(c->spiderPendingLimit(), c->spiderBatchSize());
+    d_->crawler->setMetadataConcurrency(c->spiderMetadataConcurrency());
     d_->crawler->setWalkInterval(c->spiderWalkInterval());
     // Re-derives the rotation threshold, so lowering the budget starts capping
     // the current file immediately instead of at the next launch.
@@ -199,10 +214,14 @@ void Application::applyConfig()
     // where start() itself does the initial launch). start()/stop() are
     // idempotent.
     if (d_->running) {
-        if (c->indexerEnabled() || d_->options.forceSpider)
+        if (c->indexerEnabled() || d_->options.forceSpider) {
+            d_->crawlerPipeline->start();
             d_->crawler->start();
-        else
+        }
+        else {
             d_->crawler->stop();
+            d_->crawlerPipeline->stop();
+        }
 
         if (c->p2pReplication())
             d_->replication->start();
@@ -213,12 +232,27 @@ void Application::applyConfig()
 
 void Application::wireSignals()
 {
-    // Newly crawled torrents flow into the single insertion path.
-    connect(d_->crawler.get(), &net::Crawler::discovered, d_->indexing.get(),
-        [this](const domain::Torrent& t) { d_->indexing->insert(t); });
-
-    // Let the crawler skip a metadata fetch for torrents already in the index.
-    d_->crawler->setKnownHashFilter([this](const QString& hash) { return d_->torrents->exists(hash); });
+    connect(d_->crawler.get(), &net::Crawler::discovered, this, [this](const domain::Torrent& t) {
+        const auto admission = d_->crawlerPipeline->insert(t);
+        if (admission != service::CrawlerPipeline::Admission::Accepted) {
+            d_->crawlerPipeline->releaseResult(t.hash);
+            d_->crawler->indexResult(t.hash, admission == service::CrawlerPipeline::Admission::Full);
+        }
+    });
+    d_->crawler->setResultBudget(
+        [this](const QString& hash) { return d_->crawlerPipeline->reserveResult(hash); },
+        [this](const QString& hash) { d_->crawlerPipeline->releaseResult(hash); });
+    d_->crawler->setHashLookup([this](const QString& hash, std::function<void(domain::HashState)> callback) {
+        return d_->crawlerPipeline->checkState(hash, std::move(callback)) == service::CrawlerPipeline::Admission::Accepted;
+    });
+    connect(d_->crawlerPipeline.get(), &service::CrawlerPipeline::indexFinished, this,
+        [this](const QString& hash, service::IndexingService::Outcome outcome) {
+            Q_UNUSED(outcome);
+            d_->crawler->indexResult(hash, false); // SQL retries retain metadata inside the pipeline.
+        });
+    // Preserve the shared notification bus used by tracker, UI and REST events.
+    connect(d_->crawlerPipeline.get(), &service::CrawlerPipeline::torrentIndexed, d_->indexing.get(),
+        &service::IndexingService::torrentIndexed);
 
     // A freshly indexed torrent triggers tracker scrapes.
     connect(d_->indexing.get(), &service::IndexingService::torrentIndexed, d_->trackers.get(),
@@ -269,10 +303,13 @@ bool Application::start()
     }
 
     d_->feed->load();
+    applyConfig(); // restore service toggles after a prior stop() in this process
     d_->transport->start();
 
-    if (d_->config->indexerEnabled() || d_->options.forceSpider)
+    if (d_->config->indexerEnabled() || d_->options.forceSpider) {
+        d_->crawlerPipeline->start();
         d_->crawler->start();
+    }
     if (d_->config->p2pReplication())
         d_->replication->start();
 
@@ -286,6 +323,7 @@ bool Application::start()
         d_->apiServer->start(d_->config->httpPort());
 
     d_->running = true;
+    d_->metrics->start();
     return true;
 }
 
@@ -301,13 +339,17 @@ void Application::stop()
     // announces / HTTP requests are drained rather than left blocking teardown.
     d_->crawler->stop();
     d_->trackers->stop();
+    d_->migrations->shutdown();
     d_->downloads->saveSession(d_->options.dataDirectory + QStringLiteral("/torrents_session.json"));
     d_->feed->save();
     d_->replication->stop();
     // The sync worker reads/writes the database on its own thread; it has to be
     // gone before Manticore is torn down under it.
     d_->databaseSync->shutdown();
+    d_->crawlerPipeline->stop();
     d_->transport->stop();
+    d_->crawler->releaseStoppedFetches();
+    d_->metrics->stop();
     d_->manticore->stop();
 
     d_->running = false;

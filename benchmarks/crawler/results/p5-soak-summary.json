@@ -1,0 +1,120 @@
+{
+  "phase": "P5",
+  "wallClockRun": true,
+  "secondsRequested": 7200,
+  "longValidation": true,
+  "cyclesPerProbe": 100,
+  "controlled": {
+    "wallMs": 7200392,
+    "delivered": 53867,
+    "databaseRows": 53875,
+    "exact": true,
+    "capacityAccounted": true,
+    "connectionsAfterStop": 0,
+    "accepted": 124857,
+    "completed": 124587,
+    "cancelled": 270,
+    "databaseRetries": 9922,
+    "networkRetries": 9805,
+    "metricPeaks": {
+      "crawler.db_pending": 21,
+      "crawler.db_pending_bytes": 37754608,
+      "crawler.metadata_inflight": 9,
+      "crawler.discovery_slots": 23
+    },
+    "resources": {
+      "file": "E:\\Project\\rats-search-dev\\build-windows-x64\\p5-two-hour-final\\controlled.json.resources.jsonl",
+      "samples": 7202,
+      "firstElapsedMs": 57,
+      "lastElapsedMs": 7200109,
+      "maxSampleGapMs": 1072,
+      "coverageRatio": 1.0000072222222223,
+      "samplingDensity": 1.0002777777777778,
+      "baselineThreads": 7,
+      "lastThreads": 5,
+      "peakThreads": 10,
+      "peakSampledWorkingSetBytes": 23642112,
+      "peakOsWorkingSetBytes": 24707072,
+      "peakPrivateBytes": 10518528,
+      "cpuCorePercent": 5.791190813621902,
+      "warmupMs": 900000,
+      "windowMs": 900000,
+      "firstSteadyWindow": {
+        "samples": 900,
+        "workingSetMiB": 22.224184027777778,
+        "privateMiB": 8.919618055555556,
+        "threads": 5
+      },
+      "lastSteadyWindow": {
+        "samples": 902,
+        "workingSetMiB": 21.136865992239468,
+        "privateMiB": 9.810945295177383,
+        "threads": 5
+      },
+      "privateSlopeMiBPerHour": 0.5160324563639,
+      "pendingPeak": 19,
+      "activePeak": 3,
+      "estimatedBytesPeak": 12585018,
+      "connectionPeak": 2
+    }
+  },
+  "live": {
+    "wallMs": 7200372,
+    "announcements": 4,
+    "metadataAttempts": 4,
+    "metadataSuccesses": 1,
+    "metadataFailures": 3,
+    "metadataTimeouts": 3,
+    "networkRetries": 0,
+    "inserted": 1,
+    "dhtNodesAtEnd": 244,
+    "connectionsAfterStop": 0,
+    "resourceSamplesRetained": 1024,
+    "resourceSamplesWritten": 7201,
+    "executionEnvironment": "separate network environment",
+    "resources": {
+      "file": "E:\\Project\\rats-search-dev\\build-windows-x64\\p5-network-two-hour\\live.json.resources.jsonl",
+      "samples": 7201,
+      "firstElapsedMs": 75,
+      "lastElapsedMs": 7200120,
+      "maxSampleGapMs": 1057,
+      "coverageRatio": 1.00000625,
+      "samplingDensity": 1.000138888888889,
+      "baselineThreads": 31,
+      "lastThreads": 28,
+      "peakThreads": 31,
+      "peakSampledWorkingSetBytes": 65179648,
+      "peakOsWorkingSetBytes": 77672448,
+      "peakPrivateBytes": 34992128,
+      "cpuCorePercent": 5.877133406805096,
+      "warmupMs": 900000,
+      "windowMs": 900000,
+      "firstSteadyWindow": {
+        "samples": 900,
+        "workingSetMiB": 50.47234375,
+        "privateMiB": 20.53751736111111,
+        "threads": 27.855555555555554
+      },
+      "lastSteadyWindow": {
+        "samples": 901,
+        "workingSetMiB": 47.604523619589344,
+        "privateMiB": 22.837459246670367,
+        "threads": 28.043285238623753
+      },
+      "privateSlopeMiBPerHour": 1.3900169834809528
+    }
+  },
+  "binarySha256": {
+    "controlled": "d45f8669ff14848c3cf6a915876eb1b059ef37253b34fcff8c4b6bb46dc97180",
+    "live": "8b98d5c6fb7b3021e610f9659cf06c1a3ab095d7a64496708cc2fcd06bce2bc8"
+  },
+  "caveats": [
+    "Controlled metadata availability and intermittent database errors are injected; not real DHT throughput.",
+    "Resources cover each probe only, excluding searchd and system-wide traffic; sampling itself adds overhead.",
+    "Steady-window resource changes describe this workload and duration; they do not prove absence of all leaks.",
+    "Confirmed rows may outnumber notifications when a restart cancels delivery after commit.",
+    "No wire bandwidth measurement."
+  ],
+  "networkBandwidth": null,
+  "continuousSampling": true
+}

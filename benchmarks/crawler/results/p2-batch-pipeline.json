@@ -1,0 +1,429 @@
+{
+    "batch_size": 100,
+    "batch_wait_ms": 100,
+    "network": "disabled",
+    "notification_limit_per_50ms": 5,
+    "phase": "P2",
+    "runs": [
+        {
+            "delivered": 300,
+            "delivered_per_second": 79.85311923718338,
+            "elapsed_ms": 3756.8977,
+            "inputs": 300,
+            "metrics": {
+                "counters": {
+                    "crawler.db_executed": 300,
+                    "crawler.index_inserted": 300,
+                    "db.query_calls": 14,
+                    "db.query_ok": 14,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 14,
+                    "db.write_ok": 14,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_failed": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0
+                },
+                "elapsed_ms": 3756.9507,
+                "enabled": true,
+                "gauges": {
+                    "crawler.db_filter_version": {
+                        "current": 0,
+                        "peak": 0
+                    },
+                    "crawler.db_pending": {
+                        "current": 0,
+                        "peak": 256
+                    },
+                    "crawler.db_pending_bytes": {
+                        "current": 0,
+                        "peak": 195984
+                    },
+                    "crawler.db_state": {
+                        "current": 2,
+                        "peak": 2
+                    },
+                    "crawler.notification_pending": {
+                        "current": 0,
+                        "peak": 256
+                    }
+                },
+                "samples": {
+                    "crawler.db_batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    },
+                    "crawler.db_queue_wait_ms": {
+                        "count": 300,
+                        "max": 115.6073,
+                        "mean": 36.734200666666666,
+                        "p50": 9.8986,
+                        "p95": 115.5243,
+                        "retained": 300
+                    },
+                    "crawler.index_ms": {
+                        "count": 7,
+                        "max": 10.1192,
+                        "mean": 4.414185714285714,
+                        "p50": 2.9423,
+                        "p95": 10.1192,
+                        "retained": 7
+                    },
+                    "crawler.task_latency_ms": {
+                        "count": 300,
+                        "max": 3252.4347,
+                        "mean": 1864.503450333333,
+                        "p50": 1877.7551,
+                        "p95": 3189.7297,
+                        "retained": 300
+                    },
+                    "db.query_ms": {
+                        "count": 14,
+                        "max": 1.5513,
+                        "mean": 0.5260714285714285,
+                        "p50": 0.4541,
+                        "p95": 1.5513,
+                        "retained": 14
+                    },
+                    "db.rows_per_statement": {
+                        "count": 14,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 14
+                    },
+                    "db.statement_bytes": {
+                        "count": 14,
+                        "max": 17795,
+                        "mean": 7348.642857142857,
+                        "p50": 1955,
+                        "p95": 17795,
+                        "retained": 14
+                    },
+                    "db.write_ms": {
+                        "count": 14,
+                        "max": 3.3228,
+                        "mean": 1.1005999999999998,
+                        "p50": 0.5855,
+                        "p95": 3.3228,
+                        "retained": 14
+                    },
+                    "index.batch_ms": {
+                        "count": 7,
+                        "max": 10.0752,
+                        "mean": 4.377985714285714,
+                        "p50": 2.9078,
+                        "p95": 10.0752,
+                        "retained": 7
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 7,
+                        "max": 8.3758,
+                        "mean": 3.6192428571428574,
+                        "p50": 2.1649,
+                        "p95": 8.3758,
+                        "retained": 7
+                    },
+                    "index.batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    }
+                },
+                "schema": 1
+            },
+            "repeat": 1
+        },
+        {
+            "delivered": 300,
+            "delivered_per_second": 79.73003410452209,
+            "elapsed_ms": 3762.6975,
+            "inputs": 300,
+            "metrics": {
+                "counters": {
+                    "crawler.db_executed": 300,
+                    "crawler.index_inserted": 300,
+                    "db.query_calls": 14,
+                    "db.query_ok": 14,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 14,
+                    "db.write_ok": 14,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_failed": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0
+                },
+                "elapsed_ms": 3762.7812,
+                "enabled": true,
+                "gauges": {
+                    "crawler.db_filter_version": {
+                        "current": 0,
+                        "peak": 0
+                    },
+                    "crawler.db_pending": {
+                        "current": 0,
+                        "peak": 256
+                    },
+                    "crawler.db_pending_bytes": {
+                        "current": 0,
+                        "peak": 195984
+                    },
+                    "crawler.db_state": {
+                        "current": 2,
+                        "peak": 2
+                    },
+                    "crawler.notification_pending": {
+                        "current": 0,
+                        "peak": 256
+                    }
+                },
+                "samples": {
+                    "crawler.db_batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    },
+                    "crawler.db_queue_wait_ms": {
+                        "count": 300,
+                        "max": 112.4617,
+                        "mean": 34.33051866666667,
+                        "p50": 10.731,
+                        "p95": 108.3376,
+                        "retained": 300
+                    },
+                    "crawler.index_ms": {
+                        "count": 7,
+                        "max": 10.5429,
+                        "mean": 5.373814285714286,
+                        "p50": 3.6541,
+                        "p95": 10.5429,
+                        "retained": 7
+                    },
+                    "crawler.task_latency_ms": {
+                        "count": 300,
+                        "max": 3259.6228,
+                        "mean": 1869.4997563333336,
+                        "p50": 1884.7099,
+                        "p95": 3191.1571,
+                        "retained": 300
+                    },
+                    "db.query_ms": {
+                        "count": 14,
+                        "max": 2.1157,
+                        "mean": 0.6798357142857144,
+                        "p50": 0.4946,
+                        "p95": 2.1157,
+                        "retained": 14
+                    },
+                    "db.rows_per_statement": {
+                        "count": 14,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 14
+                    },
+                    "db.statement_bytes": {
+                        "count": 14,
+                        "max": 17795,
+                        "mean": 7348.642857142857,
+                        "p50": 1955,
+                        "p95": 17795,
+                        "retained": 14
+                    },
+                    "db.write_ms": {
+                        "count": 14,
+                        "max": 2.6504,
+                        "mean": 1.2633142857142858,
+                        "p50": 0.6113,
+                        "p95": 2.6504,
+                        "retained": 14
+                    },
+                    "index.batch_ms": {
+                        "count": 7,
+                        "max": 10.4422,
+                        "mean": 5.3161000000000005,
+                        "p50": 3.6186,
+                        "p95": 10.4422,
+                        "retained": 7
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 7,
+                        "max": 8.1573,
+                        "mean": 4.286828571428571,
+                        "p50": 2.2317,
+                        "p95": 8.1573,
+                        "retained": 7
+                    },
+                    "index.batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    }
+                },
+                "schema": 1
+            },
+            "repeat": 2
+        },
+        {
+            "delivered": 300,
+            "delivered_per_second": 79.7011737326185,
+            "elapsed_ms": 3764.06,
+            "inputs": 300,
+            "metrics": {
+                "counters": {
+                    "crawler.db_executed": 300,
+                    "crawler.index_inserted": 300,
+                    "db.query_calls": 14,
+                    "db.query_ok": 14,
+                    "db.rows_returned": 0,
+                    "db.write_calls": 14,
+                    "db.write_ok": 14,
+                    "index.batch_attempts": 300,
+                    "index.batch_collided": 0,
+                    "index.batch_failed": 0,
+                    "index.batch_inserted_reported": 300,
+                    "index.batch_invalid": 0,
+                    "index.batch_merged": 0,
+                    "index.batch_rejected": 0
+                },
+                "elapsed_ms": 3764.1044,
+                "enabled": true,
+                "gauges": {
+                    "crawler.db_filter_version": {
+                        "current": 0,
+                        "peak": 0
+                    },
+                    "crawler.db_pending": {
+                        "current": 0,
+                        "peak": 256
+                    },
+                    "crawler.db_pending_bytes": {
+                        "current": 0,
+                        "peak": 195984
+                    },
+                    "crawler.db_state": {
+                        "current": 2,
+                        "peak": 2
+                    },
+                    "crawler.notification_pending": {
+                        "current": 0,
+                        "peak": 256
+                    }
+                },
+                "samples": {
+                    "crawler.db_batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    },
+                    "crawler.db_queue_wait_ms": {
+                        "count": 300,
+                        "max": 114.8623,
+                        "mean": 37.050232666666666,
+                        "p50": 17.3314,
+                        "p95": 109.6665,
+                        "retained": 300
+                    },
+                    "crawler.index_ms": {
+                        "count": 7,
+                        "max": 17.6907,
+                        "mean": 5.696785714285714,
+                        "p50": 3.5359,
+                        "p95": 17.6907,
+                        "retained": 7
+                    },
+                    "crawler.task_latency_ms": {
+                        "count": 300,
+                        "max": 3261.2327,
+                        "mean": 1870.7071696666662,
+                        "p50": 1885.1438,
+                        "p95": 3189.6041,
+                        "retained": 300
+                    },
+                    "db.query_ms": {
+                        "count": 14,
+                        "max": 11.3411,
+                        "mean": 1.2434999999999998,
+                        "p50": 0.4375,
+                        "p95": 11.3411,
+                        "retained": 14
+                    },
+                    "db.rows_per_statement": {
+                        "count": 14,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 14
+                    },
+                    "db.statement_bytes": {
+                        "count": 14,
+                        "max": 17795,
+                        "mean": 7348.642857142857,
+                        "p50": 1955,
+                        "p95": 17795,
+                        "retained": 14
+                    },
+                    "db.write_ms": {
+                        "count": 14,
+                        "max": 1.9658,
+                        "mean": 1.0226285714285714,
+                        "p50": 0.8302,
+                        "p95": 1.9658,
+                        "retained": 14
+                    },
+                    "index.batch_ms": {
+                        "count": 7,
+                        "max": 17.6125,
+                        "mean": 5.6476,
+                        "p50": 3.5028,
+                        "p95": 17.6125,
+                        "retained": 7
+                    },
+                    "index.batch_persist_ms": {
+                        "count": 7,
+                        "max": 6.1233,
+                        "mean": 3.482771428571429,
+                        "p50": 2.8228,
+                        "p95": 6.1233,
+                        "retained": 7
+                    },
+                    "index.batch_size": {
+                        "count": 7,
+                        "max": 100,
+                        "mean": 42.857142857142854,
+                        "p50": 10,
+                        "p95": 100,
+                        "retained": 7
+                    }
+                },
+                "schema": 1
+            },
+            "repeat": 3
+        }
+    ]
+}

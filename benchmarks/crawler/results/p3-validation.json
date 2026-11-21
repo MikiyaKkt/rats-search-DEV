@@ -1,0 +1,86 @@
+{
+  "phase": "P3",
+  "utc": "2026-11-21T01:27:50.715Z",
+  "branch": "feat/crawler-p0-observability",
+  "baseRevision": "fa5abc8ecb090bbf574c3625958ff619893ba3d0",
+  "sourceModified": true,
+  "platform": "Windows x64",
+  "qt": "6.10.1",
+  "compiler": "MinGW GCC 13.1",
+  "fullSuite": {
+    "passed": 31,
+    "failed": 0,
+    "wallSeconds": 127.27,
+    "log": "build-windows-x64/p3-full-tests.log"
+  },
+  "finalFocused": {
+    "passed": 4,
+    "failed": 0,
+    "log": "build-windows-x64/p3-focused-tests.log",
+    "qtTestTotals": [
+      {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "smoke": {
+    "seconds": 3,
+    "exitCode": 0,
+    "isolatedDatabase": true,
+    "crawlerRunning": true,
+    "peerIngestionDisabled": true,
+    "result": "p3-lifecycle-smoke.json"
+  },
+  "limits": {
+    "discovery": 5000,
+    "pendingItems": 1000,
+    "estimatedPendingBytes": 67108864,
+    "metadataReservationBytes": 4194304,
+    "metadataConcurrency": 10,
+    "highWaterPercent": 80,
+    "lowWaterPercent": 50,
+    "maxRetries": 3,
+    "databaseRetryDeadlineSeconds": 60,
+    "networkRetryDeadlineSeconds": 120
+  },
+  "rssMeasured": false,
+  "networkThroughputMeasured": false,
+  "sha256": {
+    "src/common/crawler_limits.h": "66c3df4358b8f8d079b90fde45355f3d490ca10b8b6be9d1fe49d070d48a47ec",
+    "src/net/crawler.h": "f9a8c82214aa29cd0ef1b99596713188f3966cbf66ecb191b28f8380cd1ab538",
+    "src/net/crawler.cpp": "5298a2ed80377d367251b975eb83b8d0172af73978bbf5f7abe2b0a67358de3a",
+    "src/services/crawler_pipeline.h": "f2f025d8b4a1e4a057439ece63795e23dc9768a9bd39b18577bb7b3d3ff955d7",
+    "src/services/crawler_pipeline.cpp": "ed43612ffc34db38ae0b541968c8219325098ffe763f609bc61555e2cbceaab1",
+    "src/services/indexing_service.h": "581742ef14febd4327eb8ba11de772fc1b6ca13d84b572b0c859f4cb5ba2b76b",
+    "src/services/indexing_service.cpp": "fbe4257afc890ae1a7ff3e1ddb4bfe149ca3fa864ef70f1f1f3f6bd66a1b1a98",
+    "src/data/torrent_repository.h": "06945e48a9978c6d68fca6c51771dfe25d055e0f80c19c65f971a29729f563ca",
+    "src/data/torrent_repository.cpp": "86ba2b8ef733ea343ebb11db602ba3bfc902150cc3b2beafab7339b265fb2055",
+    "src/app/application.cpp": "547b614c1df2202bd305a92695995267570280ff04dd870c778c4c5ae24035b6",
+    "tests/test_crawler_metrics.cpp": "cb27d06e0f4fea6e3dd726fb24e5900aa4fba1afa263efbae91fa2a263b08307",
+    "tests/test_crawler_pipeline.cpp": "95e590c4f4468faba4f06d24cd1347a875ad899546f71777b50497ca9c3fd083",
+    "tests/test_crawler_batch_indexing.cpp": "288fa79a5666d1e07cf8887beb4b1b1103a0303fad3d7bff72804f4081b85261",
+    "build-windows-x64/bin/RatsSearch.exe": "b92a92e7c0ac0d2abf7a6d05b41f298b01d621956888c3fe6c50dbfb64cbac62",
+    "build-windows-x64/tests/crawler_live_probe.exe": "78f0c7c46100504263aaf83d4d2b5e0de9a32d424672eea90cf5a0238bcc5de9",
+    "build-windows-x64/tests/test_crawler_metrics.exe": "4595cdd193208d97eea03a29d0a16bff9ab85957815201615268b9b964a3795f",
+    "build-windows-x64/tests/test_crawler_pipeline.exe": "d5573fa03b0ad8675c99e1ae96ae62ddbda161d83e937f37805821af4c387331",
+    "build-windows-x64/tests/test_crawler_batch_indexing.exe": "7e5cd25ba2d62635de9a3221d592e66aab08746764b205f67b5e3eb847b6f4e9",
+    "build-windows-x64/tests/test_manticore_queries.exe": "da04b50e9df55952ef4a4668afd11abc226b114fbfc9a83b432c839fd64e2c1a"
+  }
+}

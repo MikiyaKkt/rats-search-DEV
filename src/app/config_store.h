@@ -135,6 +135,12 @@ public:
 
     int spiderWalkInterval() const;
     void setSpiderWalkInterval(int interval);
+    int spiderMetadataConcurrency() const;
+    void setSpiderMetadataConcurrency(int value);
+    int spiderPendingLimit() const;
+    void setSpiderPendingLimit(int value);
+    int spiderBatchSize() const;
+    void setSpiderBatchSize(int value);
 
     // =========================================================================
     // Filter Settings

@@ -3,10 +3,12 @@
 #include "data/torrent_repository.h"
 #include "domain/content_classifier.h"
 #include "services/filter_policy.h"
+#include "common/performance_metrics.h"
 
 #include <QDebug>
 #include <QSet>
 #include <QStringList>
+#include <QScopeGuard>
 
 namespace rats::service {
 
@@ -17,13 +19,24 @@ IndexingService::IndexingService(data::TorrentRepository* repository, FilterPoli
 
 IndexingService::Result IndexingService::insert(domain::Torrent torrent)
 {
+    auto& metrics = common::PerformanceMetrics::instance();
+    common::PerformanceTimer timing(QStringLiteral("index.single_ms"));
+    metrics.increment(QStringLiteral("index.single_attempts"));
+    data::TorrentRepository::WriteGuard write(repository_);
+    torrent.hash = torrent.hash.toLower();
     Result result;
+    if (!repository_->reconcileStatistics()) {
+        result.error = QStringLiteral("Database statistics reconciliation failed");
+        return result;
+    }
 
     if (!torrent.isValid()) {
+        metrics.increment(QStringLiteral("index.invalid"));
         result.error = QStringLiteral("Invalid hash");
         return result;
     }
     if (torrent.name.isEmpty()) {
+        metrics.increment(QStringLiteral("index.invalid"));
         result.error = QStringLiteral("Empty torrent name");
         return result;
     }
@@ -32,21 +45,36 @@ IndexingService::Result IndexingService::insert(domain::Torrent torrent)
     // below and is handed to add() further down, so a torrent the crawler has
     // never seen costs a single docid query instead of one here and another
     // inside add().
-    const data::TorrentRepository::RowSlot slot = repository_->resolve(torrent.hash, /*withRow*/ true);
+    const data::TorrentRepository::RowSlot slot = [&] {
+        common::PerformanceTimer lookup(QStringLiteral("index.dedupe_ms"));
+        return repository_->resolve(torrent.hash, /*withRow*/ true);
+    }();
+    if (slot.failed) {
+        metrics.increment(QStringLiteral("index.failed"));
+        result.error = QStringLiteral("Database lookup failed");
+        return result;
+    }
 
     // Already indexed? Merge what the incoming copy adds over the stored one
     // (e.g. from a peer) and return the stored entity.
     if (slot.stored) {
+        metrics.increment(QStringLiteral("index.merged"));
         domain::Torrent existing = *slot.stored;
         result.success = true;
         result.alreadyExists = true;
         result.torrent = existing;
 
-        // Backfill the file list when the stored copy has none but the incoming
-        // one does. This heals a metadata-only row into a complete torrent
-        // instead of leaving the two out of sync.
-        if (existing.files == 0 && !torrent.fileList.isEmpty()
-            && repository_->updateFiles(existing.hash, torrent.fileList)) {
+        // The summary count can be nonzero even when its details row is missing
+        // or truncated. Repair from a complete incoming list, never a snippet.
+        if (!torrent.fileList.isEmpty()
+            && torrent.fileList.size() >= qMax(existing.files, torrent.files)
+            && repository_->filesOf(existing.hash).size() < torrent.fileList.size()) {
+            if (!repository_->updateFiles(existing.hash, torrent.fileList)) {
+                result.success = false;
+                result.error = QStringLiteral("Database file merge failed");
+                metrics.increment(QStringLiteral("index.failed"));
+                return result;
+            }
             existing.fileList = torrent.fileList;
             existing.files = torrent.fileList.size();
             result.torrent = existing;
@@ -55,18 +83,32 @@ IndexingService::Result IndexingService::insert(domain::Torrent torrent)
         if (torrent.good > existing.good || torrent.bad > existing.bad) {
             existing.good = qMax(existing.good, torrent.good);
             existing.bad = qMax(existing.bad, torrent.bad);
-            repository_->update(existing);
+            if (!repository_->updateVotes(existing.hash, existing.good, existing.bad, true)) {
+                result.success = false;
+                result.error = QStringLiteral("Database vote merge failed");
+                metrics.increment(QStringLiteral("index.failed"));
+                return result;
+            }
             result.torrent = existing;
+        }
+        if (result.success && repository_->takeConfirmedInsert(existing.hash)) {
+            result.alreadyExists = false;
+            write.unlock();
+            emit torrentIndexed(result.torrent);
         }
         return result;
     }
 
-    if (torrent.contentType == domain::ContentType::Unknown)
+    if (torrent.contentType == domain::ContentType::Unknown) {
+        common::PerformanceTimer classification(QStringLiteral("index.classify_ms"));
         domain::ContentClassifier::classify(torrent);
+    }
 
     if (filter_) {
+        common::PerformanceTimer filtering(QStringLiteral("index.filter_ms"));
         if (const QString reason = filter_->rejectionReason(torrent); !reason.isEmpty()) {
-            qInfo() << "[Indexing] rejected" << torrent.hash.left(16) << "-" << reason;
+            metrics.increment(QStringLiteral("index.rejected"));
+            qCDebug(common::crawlerDetail) << "[Indexing] rejected" << torrent.hash.left(16) << "-" << reason;
             result.error = QStringLiteral("Rejected: ") + reason;
             return result;
         }
@@ -74,7 +116,12 @@ IndexingService::Result IndexingService::insert(domain::Torrent torrent)
 
     // The slot resolved above is still the one this hash maps to; add() only has
     // to trust it, not look it up again.
-    if (!repository_->add(torrent, slot)) {
+    const bool stored = [&] {
+        common::PerformanceTimer persistence(QStringLiteral("index.persist_ms"));
+        return repository_->add(torrent, slot);
+    }();
+    if (!stored) {
+        metrics.increment(slot.collided() ? QStringLiteral("index.collided") : QStringLiteral("index.failed"));
         result.error = slot.collided() ? QStringLiteral("Row id belongs to a different torrent")
                                        : QStringLiteral("Database insert failed");
         return result;
@@ -82,103 +129,113 @@ IndexingService::Result IndexingService::insert(domain::Torrent torrent)
 
     result.success = true;
     result.torrent = torrent;
-    qInfo() << "[Indexing] indexed" << torrent.hash.left(16) << torrent.name.left(50)
+    metrics.increment(QStringLiteral("index.inserted"));
+    qCDebug(common::crawlerDetail) << "[Indexing] indexed" << torrent.hash.left(16) << torrent.name.left(50)
             << "size:" << (torrent.size / (1024 * 1024)) << "MB files:" << torrent.files;
 
+    write.unlock();
     emit torrentIndexed(torrent);
     return result;
 }
 
-IndexingService::BatchResult IndexingService::insertBatch(
-    QVector<domain::Torrent> torrents, const BatchOptions& options)
+IndexingService::BatchResult IndexingService::insertBatch(QVector<domain::Torrent> torrents, const BatchOptions& options)
 {
+    data::TorrentRepository::WriteGuard write(repository_);
     BatchResult result;
-    if (torrents.isEmpty())
+    if (!repository_->reconcileStatistics()) {
+        for (const auto& t : torrents) result.record({t.hash.toLower(), Outcome::Failed, "lookup", "Statistics reconciliation failed", {}});
         return result;
-
-    // 1. Validate and de-duplicate inside the batch itself. A dump can carry the
-    //    same hash twice (two exports concatenated); letting both through would
-    //    insert one row and then treat the second one as new as well.
-    QVector<domain::Torrent> candidates;
-    candidates.reserve(torrents.size());
-    QSet<QString> seen;
-    for (const domain::Torrent& t : torrents) {
-        if (!t.isValid() || t.name.isEmpty()) {
-            ++result.invalid;
-            continue;
-        }
-        if (seen.contains(t.hash))
-            continue;
-        seen.insert(t.hash);
-        candidates.append(t);
     }
-    if (candidates.isEmpty())
-        return result;
-
-    // 2. Dedupe against the index with one lookup for the whole batch instead of
-    //    a get() per torrent. Like insert(), this happens BEFORE classification
-    //    and filtering: an already-stored torrent keeps its row and merges, and
-    //    is never re-classified or re-judged by a filter it predates.
-    QStringList hashes;
-    hashes.reserve(candidates.size());
-    for (const domain::Torrent& t : candidates)
-        hashes << t.hash;
-    QSet<QString> collided;
-    const QHash<QString, domain::Torrent> existing = repository_->getMany(hashes, &collided);
-
-    QVector<domain::Torrent> fresh;
-    fresh.reserve(candidates.size());
-
-    for (domain::Torrent& incoming : candidates) {
-        // A torrent whose row id is held by a different one cannot be written
-        // without destroying that one, so it is dropped here rather than in the
-        // repository — the batch write below has no way to skip a single row.
-        if (collided.contains(incoming.hash)) {
-            ++result.collided;
+    auto& metrics = common::PerformanceMetrics::instance();
+    common::PerformanceTimer timing(QStringLiteral("index.batch_ms"));
+    metrics.increment(QStringLiteral("index.batch_attempts"), torrents.size());
+    metrics.observe(QStringLiteral("index.batch_size"), torrents.size());
+    const auto outcome = qScopeGuard([&] {
+        metrics.increment(QStringLiteral("index.batch_inserted_reported"), result.inserted);
+        metrics.increment(QStringLiteral("index.batch_merged"), result.merged);
+        metrics.increment(QStringLiteral("index.batch_invalid"), result.invalid);
+        metrics.increment(QStringLiteral("index.batch_rejected"), result.rejected);
+        metrics.increment(QStringLiteral("index.batch_collided"), result.collided);
+        metrics.increment(QStringLiteral("index.batch_failed"), result.failed);
+    });
+    QVector<domain::Torrent> candidates;
+    QSet<QString> seen;
+    for (auto& t : torrents) {
+        t.hash = t.hash.toLower();
+        if (!t.isValid() || t.name.isEmpty()) {
+            result.record({t.hash, Outcome::Invalid, "validation", "Invalid hash or empty name", {}});
+        } else if (seen.contains(t.hash)) {
+            result.record({t.hash, Outcome::Duplicate, "validation", "Duplicate inside batch", {}});
+            metrics.increment(QStringLiteral("index.batch_duplicates"));
+        } else { seen.insert(t.hash); candidates.append(std::move(t)); }
+    }
+    for (int offset = 0; offset < candidates.size(); offset += 500) {
+        const auto chunk = candidates.mid(offset, 500);
+        QStringList hashes;
+        for (const auto& t : chunk) hashes.append(t.hash);
+        QSet<QString> collided;
+        bool ok = false;
+        const auto existing = repository_->getMany(hashes, &collided, &ok);
+        if (!ok) {
+            for (const auto& t : chunk) result.record({t.hash, Outcome::Failed, "lookup", "Database lookup failed", {}});
             continue;
         }
-
-        auto it = existing.constFind(incoming.hash);
-        if (it == existing.constEnd()) {
-            if (incoming.contentType == domain::ContentType::Unknown)
-                domain::ContentClassifier::classify(incoming);
-            if (options.applyFilters && filter_ && !filter_->accepts(incoming)) {
-                ++result.rejected;
+        QStringList detailHashes;
+        if (options.mergeExisting) for (const auto& t : chunk)
+            if (existing.contains(t.hash) && !t.fileList.isEmpty()) detailHashes.append(t.hash);
+        bool detailsOk = true;
+        const auto details = repository_->filesOf(detailHashes, &detailsOk);
+        QVector<domain::Torrent> fresh;
+        for (auto incoming : chunk) {
+            if (collided.contains(incoming.hash)) {
+                result.record({incoming.hash, Outcome::Collision, "lookup", "Row id collision", {}}); continue;
+            }
+            if (!existing.contains(incoming.hash)) {
+                if (incoming.contentType == domain::ContentType::Unknown) domain::ContentClassifier::classify(incoming);
+                const auto reason = options.applyFilters && filter_ ? filter_->rejectionReason(incoming) : QString();
+                if (!reason.isEmpty()) result.record({incoming.hash, Outcome::Rejected, "filter", reason, {}});
+                else fresh.append(std::move(incoming));
                 continue;
             }
-            fresh.append(incoming);
-            continue;
+            auto stored = existing.value(incoming.hash);
+            bool merged = true;
+            QString stage;
+            if (options.mergeExisting) {
+                if (!incoming.fileList.isEmpty() && incoming.fileList.size() >= qMax(stored.files, incoming.files)) {
+                    stage = "files";
+                    merged = detailsOk;
+                    if (merged && details.value(stored.hash).size() < incoming.fileList.size()) {
+                        merged = repository_->updateFiles(stored.hash, incoming.fileList);
+                        if (merged) { stored.files = incoming.fileList.size(); stored.fileList = incoming.fileList; }
+                    }
+                }
+                if (merged && (incoming.good > stored.good || incoming.bad > stored.bad)) {
+                    stage = "votes";
+                    stored.good = qMax(stored.good, incoming.good); stored.bad = qMax(stored.bad, incoming.bad);
+                    merged = repository_->updateVotes(stored.hash, stored.good, stored.bad, true);
+                }
+            }
+            const auto status = !merged ? Outcome::Failed : repository_->takeConfirmedInsert(incoming.hash) ? Outcome::Inserted : Outcome::Merged;
+            result.record({incoming.hash, status,
+                stage, merged ? QString() : QStringLiteral("Database merge failed"), stored});
         }
-
-        ++result.merged;
-        if (!options.mergeExisting)
-            continue;
-
-        // Same merge rules as insert(): heal a metadata-only row with the file
-        // list the incoming copy carries, and keep the higher vote counts.
-        domain::Torrent stored = *it;
-        // Keep the in-memory copy in step with what updateFiles() just wrote:
-        // update() below REPLACEs the whole row from this snapshot, so a stale
-        // files == 0 here would undo the backfill and leave the row claiming no
-        // files while the files table holds the list — which also re-triggers
-        // this branch (and its statistics delta) on every later import.
-        if (stored.files == 0 && !incoming.fileList.isEmpty()
-            && repository_->updateFiles(stored.hash, incoming.fileList)) {
-            stored.fileList = incoming.fileList;
-            stored.files = incoming.fileList.size();
-        }
-
-        if (incoming.good > stored.good || incoming.bad > stored.bad) {
-            stored.good = qMax(stored.good, incoming.good);
-            stored.bad = qMax(stored.bad, incoming.bad);
-            repository_->update(stored);
+        if (!fresh.isEmpty()) {
+            common::PerformanceTimer persistence(QStringLiteral("index.batch_persist_ms"));
+            for (const auto& item : repository_->addManyConfirmed(fresh)) {
+                using Status = data::TorrentRepository::PersistStatus;
+                auto status = Outcome::Failed;
+                switch (item.status) {
+                case Status::Inserted: status = Outcome::Inserted; break;
+                case Status::Existing: status = Outcome::Merged; break;
+                case Status::Collision: status = Outcome::Collision; break;
+                case Status::Invalid: status = Outcome::Invalid; break;
+                case Status::Duplicate: status = Outcome::Duplicate; break;
+                case Status::Failed: break;
+                }
+                result.record({item.hash, status, item.stage, item.error, item.torrent, item.retryable});
+            }
         }
     }
-
-    // 3. Everything genuinely new goes in as one multi-row write.
-    if (!fresh.isEmpty())
-        result.inserted = repository_->addMany(fresh);
-
     return result;
 }
 

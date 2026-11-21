@@ -360,6 +360,9 @@ bool Manticore::start()
 void Manticore::stop()
 {
     connectionCheckTimer_->stop();
+    // Workers close their own connections before the owner stops the daemon.
+    // Also release the owner's connection on stop rather than only at destruction.
+    closeCurrentThreadConnection();
 
     // Guard against double-stop calls
     if (status_ == Status::Stopped) {
@@ -452,7 +455,7 @@ QSqlDatabase Manticore::getDatabase() const
         // (restart, idle timeout). Without this a stale connection reports
         // isOpen()==true, so the lazy `!isOpen() && !open()` guard never
         // re-opens it and queries fail hard instead of self-healing.
-        db.setConnectOptions("MYSQL_OPT_RECONNECT=1");
+        db.setConnectOptions("MYSQL_OPT_RECONNECT=1;MYSQL_OPT_CONNECT_TIMEOUT=3;MYSQL_OPT_READ_TIMEOUT=5;MYSQL_OPT_WRITE_TIMEOUT=5");
         // Not a precision preference — a data-loss guard. Manticore occasionally
         // declares a text column with a floating-point MySQL column type (seen on
         // the `files` table's stored-only `size`/`path` blobs, transiently: the
@@ -467,6 +470,15 @@ QSqlDatabase Manticore::getDatabase() const
     }
 
     return QSqlDatabase::database(threadConnName);
+}
+
+void Manticore::closeCurrentThreadConnection() const
+{
+    const QString name = connectionName_ + "_" + QString::number(reinterpret_cast<quintptr>(QThread::currentThread()));
+    if (QSqlDatabase::contains(name)) {
+        { auto db = QSqlDatabase::database(name, false); db.close(); }
+        QSqlDatabase::removeDatabase(name);
+    }
 }
 
 void Manticore::sleepWithEventLoop(int intervalMs)

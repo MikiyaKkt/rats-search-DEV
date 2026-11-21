@@ -52,7 +52,7 @@ public:
 
     /**
      * @brief Display a torrent's files. Uses the torrent's embedded file list
-     * when present, otherwise fetches it from the repository via the application.
+     * when complete, otherwise loads the repository's list via the application.
      */
     void setTorrent(const rats::domain::Torrent& torrent);
 
@@ -60,6 +60,8 @@ public:
      * @brief Whether the panel is currently showing a non-empty file list.
      */
     bool hasFiles() const;
+    bool hasCompleteFiles(int expected) const { return fileCount_ > 0 && fileCount_ >= expected; }
+    void setStatus(const QString& text) { infoLabel_->setText(text); }
 
     /**
      * @brief Clear the file tree
