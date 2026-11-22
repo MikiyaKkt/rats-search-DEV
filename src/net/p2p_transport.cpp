@@ -429,6 +429,12 @@ bool P2PTransport::start()
         }
 #endif
 
+        // Reconnection can deliver a peer's first handshake during node startup.
+        d_->registeredDispatchers.clear();
+        for (auto it = d_->messageHandlers.cbegin(); it != d_->messageHandlers.cend(); ++it) {
+            d_->registerDispatcher(it.key());
+        }
+
         // --- Bring the node (and all subsystems) up -----------------------
         if (!d_->node->start()) {
             qWarning() << "Failed to start librats node";
@@ -448,12 +454,6 @@ bool P2PTransport::start()
         }
 
         d_->bitTorrentEnabled = (d_->bittorrent != nullptr);
-
-        // Post-start wiring: (re)register dispatchers for handlers that callers
-        // registered before the node was up.
-        for (auto it = d_->messageHandlers.begin(); it != d_->messageHandlers.end(); ++it) {
-            d_->registerDispatcher(it.key());
-        }
 
         if (d_->dht && d_->dht->is_running()) {
             qInfo() << "DHT discovery started on port" << d_->dhtPort;
