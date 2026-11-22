@@ -212,6 +212,7 @@ private:
     QComboBox* sortComboBox = nullptr;
     QComboBox* typeComboBox = nullptr;
     QCheckBox* safeSearchCheckBox = nullptr;
+    QCheckBox* fuzzySearchCheckBox = nullptr;
     // Search-bar "Filters" drop-down: size and file-count ranges.
     QToolButton* filtersButton = nullptr;
     QMenu* filtersMenu = nullptr;
@@ -261,6 +262,7 @@ private:
 
     // State
     QString currentSearchQuery_;
+    QString currentSearchId_;
     quint64 filesRequestId_ = 0;
     qint64 cachedTorrentCount_ = 0; // Local torrent count (from statistics)
     qint64 cachedRemoteTorrentCount_ = 0; // Sum of torrents advertised by peers

@@ -18,6 +18,7 @@
 namespace rats::data {
 
 class Database;
+class SelectQuery;
 
 // Repository for the `torrents` and `files` Manticore tables. Owns the mapping
 // between rows and domain::Torrent, all search queries, and the incrementally
@@ -48,6 +49,7 @@ public:
                       // safe column
         bool descending = true;
         bool safeSearch = false;
+        bool fuzzy = false;
         QString contentType; // "video".."archive", or "application" (Software+Games)
         qint64 sizeMin = 0;
         qint64 sizeMax = 0;
@@ -214,6 +216,13 @@ public:
     // reimplement it.
     RowIdMigrationPage migrateRowIdPage(const QString& table, qint64& cursor, int limit);
 
+    struct SearchReindexPage {
+        qint64 lastId = 0;
+        qsizetype rows = 0;
+    };
+    // Reinsert a page verbatim so Manticore rebuilds its full-text postings.
+    std::optional<SearchReindexPage> reindexSearchPage(const QString& table, qint64 afterId, int limit);
+
 signals:
     void torrentUpdated(const QString& hash);
     void statisticsChanged(qint64 torrents, qint64 files, qint64 totalSize);
@@ -231,6 +240,9 @@ private:
     // Column map for one files row (the "\n"-joined path/size blobs).
     QVariantMap filesRow(const QString& hash, const QVector<domain::File>& files);
     QVector<domain::Torrent> selectTorrents(const QString& sql, const QVariantList& params = {});
+    QVector<domain::SearchHit> searchTorrentsStrict(const SearchQuery& query, bool stableWindow = false);
+    QVector<domain::SearchHit> searchWithFuzzy(const SearchQuery& query, bool files);
+    static void applySearchFilters(SelectQuery& builder, const SearchQuery& query);
 
     // Map a user-supplied sort key to a whitelisted column, or empty if unknown.
     static QString resolveSortColumn(const QString& key);

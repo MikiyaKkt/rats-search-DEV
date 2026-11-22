@@ -769,6 +769,9 @@ index torrents
     
     min_prefix_len = 3
     expand_keywords = 1
+    charset_table = non_cont
+    ngram_len = 1
+    ngram_chars = cont
     
     rt_attr_string = hash
     rt_attr_string = name
@@ -796,6 +799,9 @@ index files
 {
     type = rt
     path = %1/files
+    charset_table = non_cont
+    ngram_len = 1
+    ngram_chars = cont
     
     rt_field = path
     rt_attr_string = hash

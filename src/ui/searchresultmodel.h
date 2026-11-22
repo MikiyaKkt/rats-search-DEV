@@ -51,7 +51,6 @@ public:
     int resultCount() const { return results_.size(); }
 
 private:
-    void mergeFileResultIntoExisting(const rats::domain::SearchHit& fileResult);
     void applyCurrentSort();
 
     QVector<rats::domain::SearchHit> results_;

@@ -68,6 +68,8 @@ QJsonObject toJson(const SearchHit& hit, ToJsonOptions options)
         obj["peer"] = hit.sourcePeerId;
     if (hit.remote)
         obj["remote"] = true;
+    if (hit.fuzzy)
+        obj["fuzzy"] = true;
     return obj;
 }
 
@@ -121,6 +123,7 @@ SearchHit searchHitFromJson(const QJsonObject& obj)
         hit.matchingPaths.append(v.toString());
     hit.sourcePeerId = obj["peer"].toString();
     hit.remote = obj["remote"].toBool(false) || !hit.sourcePeerId.isEmpty();
+    hit.fuzzy = obj["fuzzy"].toBool(false);
     return hit;
 }
 

@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <functional>
 #include <memory>
 
@@ -55,6 +56,7 @@ public:
 
     // Peers (generic — identity and count only, no application stats)
     int peerCount() const;
+    QStringList connectedPeerIds() const;
     QString ourPeerId() const;
     // Peers we reach through a relay, and circuits we carry for others. Both 0
     // when relaying is off or the node is down.

@@ -565,6 +565,16 @@ int P2PTransport::peerCount() const
     return d_->peerCount();
 }
 
+QStringList P2PTransport::connectedPeerIds() const
+{
+    QStringList ids;
+    if (d_->node) {
+        for (const auto& peer : d_->node->peers())
+            ids.append(QString::fromStdString(peer.id.to_hex()));
+    }
+    return ids;
+}
+
 QString P2PTransport::ourPeerId() const
 {
     if (!d_->node) {

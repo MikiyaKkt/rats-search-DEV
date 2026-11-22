@@ -1,9 +1,12 @@
 #ifndef RATS_PEER_PEER_API_H
 #define RATS_PEER_PEER_API_H
 
+#include "services/search_service.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 namespace rats::app {
@@ -39,14 +42,12 @@ public:
     // how a remote-only search hit (whose files are never sent with the hit) gets
     // its file list fetched and stored on demand.
     void requestTorrent(const QString& peerId, const QString& hash, bool includeFiles = true);
+    void requestSearch(const QString& searchId, const service::SearchService::Request& request);
 
 signals:
-    // A remote peer sent search hits (searchTorrent_response). Query is empty —
-    // the wire protocol never echoes it back — and torrents is the raw wire array
-    // with remote/peer provenance stamped on.
-    void remoteSearchResults(const QString& query, const QJsonArray& torrents);
-    // A remote peer sent a file-search hit (searchFiles_response).
-    void remoteFileSearchResults(const QString& query, const QJsonArray& torrents);
+    // A correlated hit from the active search. Legacy replies carry an empty ID.
+    void remoteSearchResults(const QString& searchId, const QJsonArray& torrents);
+    void remoteFileSearchResults(const QString& searchId, const QJsonArray& torrents);
     // A remote peer answered a single-torrent request (torrent_response). Emitted
     // even when the torrent already exists locally, so callers awaiting a fetch
     // still receive the payload.
@@ -57,8 +58,8 @@ private:
     void install();
 
     // Request handlers (we answer these) ---------------------------------------
-    void handleSearchRequest(const QString& peerId, const QJsonObject& data);
-    void handleSearchFilesRequest(const QString& peerId, const QJsonObject& data);
+    void handleSearchRequest(const QString& peerId, const QJsonObject& data, bool files, const QString& searchId = {});
+    void handleVersionedSearch(const QString& peerId, const QJsonObject& data);
     void handleTopTorrentsRequest(const QString& peerId, const QJsonObject& data);
     void handleTorrentRequest(const QString& peerId, const QJsonObject& data);
     void handleFeedRequest(const QString& peerId, const QJsonObject& data);
@@ -69,8 +70,9 @@ private:
     void handleDatabaseCancel(const QString& peerId, const QJsonObject& data);
 
     // Response handlers (we consume these) -------------------------------------
-    void handleSearchResult(const QString& peerId, const QJsonObject& data);
-    void handleSearchFilesResult(const QString& peerId, const QJsonObject& data);
+    void handleLegacySearchResult(const QString& peerId, const QJsonObject& data, bool files);
+    void handleVersionedSearchResult(const QString& peerId, const QJsonObject& data);
+    void emitSearchHit(const QString& peerId, const QString& searchId, QJsonObject hit, bool files);
     void handleTorrentResponse(const QString& peerId, const QJsonObject& data);
     void handleFeedResponse(const QString& peerId, const QJsonObject& data);
     void handleRandomTorrentsResponse(const QString& peerId, const QJsonObject& data);
@@ -87,6 +89,10 @@ private:
     bool insertFromPeer(const QJsonObject& data, bool trackReplication);
 
     app::Application* app_;
+    QString activeSearchId_;
+    QString activeSearchText_;
+    QSet<QString> versionedSearchPeers_;
+    QSet<QString> legacySearchPeers_;
 };
 
 } // namespace rats::peer

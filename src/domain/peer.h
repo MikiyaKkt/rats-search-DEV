@@ -10,6 +10,7 @@ namespace rats::domain {
 // This is application data (how many torrents a peer indexes), deliberately kept
 // out of the transport layer — the transport only moves bytes.
 struct PeerStats {
+    static constexpr int kSearchProtocol = 2;
     QString clientVersion;
     qint64 torrents = 0;
     qint64 files = 0;
@@ -20,6 +21,7 @@ struct PeerStats {
     // from the handshake of clients older than the feature, which read the same
     // as "no" — either way there is nothing to ask them for.
     bool databaseSharing = false;
+    int searchProtocol = 0;
 
     QJsonObject toJson() const
     {
@@ -31,6 +33,7 @@ struct PeerStats {
             { "peersConnected", peersConnected },
             { "connectedAt", connectedAt },
             { "databaseSharing", databaseSharing },
+            { "searchProtocol", searchProtocol },
         };
     }
 
@@ -47,6 +50,7 @@ struct PeerStats {
         s.peersConnected = obj["peersConnected"].toInt();
         s.connectedAt = obj["connectedAt"].toVariant().toLongLong();
         s.databaseSharing = obj["databaseSharing"].toBool(false);
+        s.searchProtocol = obj["searchProtocol"].toInt();
         return s;
     }
 };

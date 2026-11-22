@@ -41,7 +41,7 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case NameColumn:
-            return torrent.name;
+            return hit.fuzzy ? tr("[Fuzzy] %1").arg(torrent.name) : torrent.name;
         case SizeColumn:
             return rats::ui::formatSize(torrent.size);
         case SeedersColumn:
@@ -76,6 +76,8 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
                 + (hit.sourcePeerId.isEmpty() ? tr("Not indexed locally — found on a remote peer")
                                               : tr("Not indexed locally — from peer %1").arg(hit.sourcePeerId.left(8)));
         }
+        if (hit.fuzzy)
+            tip += u'\n' + tr("Fuzzy match");
         return tip;
     }
     // Custom roles for delegate
@@ -124,19 +126,42 @@ void SearchResultModel::setResults(const QVector<SearchHit>& results)
 
 void SearchResultModel::addResult(const SearchHit& result)
 {
-    // Check for duplicates by hash
     for (int i = 0; i < results_.size(); ++i) {
-        if (results_[i].torrent.hash == result.torrent.hash) {
-            // Same torrent from two sources: local wins. A peer usually answers
-            // after the local query has already filled the table, so without this
-            // the row would keep the "remote" tint for a torrent we do have.
-            if (results_[i].remote && !result.remote) {
-                results_[i].remote = false;
-                results_[i].sourcePeerId.clear();
-                emit dataChanged(index(i, 0), index(i, ColumnCount - 1), { RemoteRole, Qt::ToolTipRole });
-            }
-            return; // Already exists
+        SearchHit& current = results_[i];
+        if (current.torrent.hash != result.torrent.hash)
+            continue;
+        const bool promoted = current.fuzzy && !result.fuzzy;
+        bool changed = promoted;
+        if (promoted) {
+            current.fuzzy = false;
+            current.fromFileMatch = false;
+            current.matchingPaths.clear();
         }
+        if (current.fuzzy == result.fuzzy) {
+            if (result.fromFileMatch && !current.fromFileMatch) {
+                current.fromFileMatch = true;
+                changed = true;
+            }
+            for (const QString& path : result.matchingPaths) {
+                if (!current.matchingPaths.contains(path)) {
+                    current.matchingPaths.append(path);
+                    changed = true;
+                }
+            }
+        }
+        // A match from this instance means the torrent is available locally.
+        if (current.remote && !result.remote) {
+            current.remote = false;
+            current.sourcePeerId.clear();
+            changed = true;
+        }
+        if (changed) {
+            emit dataChanged(index(i, 0), index(i, ColumnCount - 1),
+                { Qt::DisplayRole, MatchingPathsRole, RemoteRole, Qt::ToolTipRole, Qt::SizeHintRole });
+        }
+        if (promoted)
+            applyCurrentSort();
+        return;
     }
 
     beginInsertRows(QModelIndex(), results_.size(), results_.size());
@@ -174,53 +199,13 @@ SearchHit SearchResultModel::getHit(int row) const
 
 void SearchResultModel::addFileResult(const SearchHit& result)
 {
-    mergeFileResultIntoExisting(result);
+    addResult(result);
 }
 
 void SearchResultModel::addFileResults(const QVector<SearchHit>& results)
 {
-    for (const SearchHit& result : results) {
-        mergeFileResultIntoExisting(result);
-    }
-}
-
-void SearchResultModel::mergeFileResultIntoExisting(const SearchHit& fileResult)
-{
-    // Check if this torrent already exists in results
-    for (int i = 0; i < results_.size(); ++i) {
-        if (results_[i].torrent.hash == fileResult.torrent.hash) {
-            // Merge the matching paths into existing result
-            for (const QString& path : fileResult.matchingPaths) {
-                if (!results_[i].matchingPaths.contains(path)) {
-                    results_[i].matchingPaths.append(path);
-                }
-            }
-            // Keep fromFileMatch if either is a file match
-            if (fileResult.fromFileMatch) {
-                results_[i].fromFileMatch = true;
-            }
-            // A local match for a row a peer answered first proves we do have the
-            // torrent, so the row stops being remote (see addResult()).
-            if (results_[i].remote && !fileResult.remote) {
-                results_[i].remote = false;
-                results_[i].sourcePeerId.clear();
-            }
-            // Emit dataChanged for all columns of this row, including
-            // Qt::SizeHintRole so the view recalculates the row height to accommodate
-            // the file paths
-            QModelIndex topLeft = index(i, 0);
-            QModelIndex bottomRight = index(i, ColumnCount - 1);
-            emit dataChanged(
-                topLeft, bottomRight, { MatchingPathsRole, RemoteRole, Qt::ToolTipRole, Qt::SizeHintRole });
-            return;
-        }
-    }
-
-    // Torrent doesn't exist, add as new result
-    beginInsertRows(QModelIndex(), results_.size(), results_.size());
-    results_.append(fileResult);
-    endInsertRows();
-    applyCurrentSort();
+    for (const SearchHit& result : results)
+        addResult(result);
 }
 
 void SearchResultModel::sort(int column, Qt::SortOrder order)
@@ -236,7 +221,8 @@ void SearchResultModel::sort(int column, Qt::SortOrder order)
 
 void SearchResultModel::applyCurrentSort()
 {
-    if (sortColumn_ < 0 || sortColumn_ >= ColumnCount || results_.isEmpty()) {
+    if (results_.isEmpty() || (sortColumn_ < 0
+            && std::none_of(results_.cbegin(), results_.cend(), [](const SearchHit& hit) { return hit.fuzzy; }))) {
         return;
     }
 
@@ -271,12 +257,11 @@ void SearchResultModel::applyCurrentSort()
         return false;
     };
 
-    if (order == Qt::AscendingOrder) {
-        std::stable_sort(results_.begin(), results_.end(), lessThan);
-    } else {
-        std::stable_sort(results_.begin(), results_.end(),
-            [&lessThan](const SearchHit& a, const SearchHit& b) { return lessThan(b, a); });
-    }
+    std::stable_sort(results_.begin(), results_.end(), [&](const SearchHit& a, const SearchHit& b) {
+        if (a.fuzzy != b.fuzzy)
+            return !a.fuzzy;
+        return order == Qt::AscendingOrder ? lessThan(a, b) : lessThan(b, a);
+    });
 
     // Rebuild a hash -> new row map to remap persistent indexes
     QHash<QString, int> rowByHash;

@@ -9,6 +9,30 @@
 
 ## Documentation
 
+### Searching torrents and files
+
+Enter `电影` to find a continuous Chinese term. Separate conditions with spaces
+to require each one in any order, as in `电影 1080p`. Enclose a phrase in straight
+or curly double quotes to require adjacent words in order, as in `"Ubuntu Linux"`.
+An asterisk outside quotes supports title prefixes, as in `ubun*`. File search
+matches all conditions on one file path. Its results highlight that path.
+
+Enable **Fuzzy** to supplement ordinary results with one-character corrections
+such as `ubntu` → `ubuntu`. It is off when the app starts. Fuzzy results are
+marked and appear after ordinary results. Quotes, wildcards and Info Hash lookups
+keep their original matching rules.
+
+Desktop search also asks connected Rats peers. Peers that advertise advanced
+search can answer short continuous terms, phrases and fuzzy requests. A new
+search, filter or sort gets a new request ID, so late replies from upgraded peers
+are discarded. Older peers still answer compatible ordinary searches. Their
+legacy replies may arrive without an ID and can appear after an ordinary search
+has been changed. [Search API](API.md#search)
+
+The first start after upgrading an older index may show search-index rebuilding
+progress. If the app is interrupted, the next start resumes from the last saved
+batch.
+
 ### Crawler concurrency
 
 In Settings → Indexer → Spider Performance, **Metadata concurrency limit** controls

@@ -54,6 +54,7 @@ struct SearchHit {
     QStringList matchingPaths; // highlighted <b>…</b> file-path snippets
     QString sourcePeerId; // non-empty if this hit came from a remote peer
     bool remote = false;
+    bool fuzzy = false;
 };
 
 } // namespace rats::domain

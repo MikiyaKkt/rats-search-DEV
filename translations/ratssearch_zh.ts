@@ -332,6 +332,14 @@ or they will be added automatically when you create or import a torrent.</source
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source>Fuzzy</source>
+        <translation>模糊查找</translation>
+    </message>
+    <message>
+        <source>Include results with one typo in a search word</source>
+        <translation>补充一个搜索词有一处错字的结果</translation>
+    </message>
     <message><source>Metadata requests: %1 active; configured limit: %2%3</source><translation>元数据请求：进行中 %1 个；配置上限 %2%3</translation></message>
     <message><source>; waiting for capacity</source><translation>；正在等待可用容量</translation></message>
     <message>
@@ -1491,6 +1499,14 @@ Do you want to install the update now?</source>
 <context>
     <name>SearchResultModel</name>
     <message>
+        <source>[Fuzzy] %1</source>
+        <translation>[模糊] %1</translation>
+    </message>
+    <message>
+        <source>Fuzzy match</source>
+        <translation>模糊命中</translation>
+    </message>
+    <message>
         <location filename="../src/ui/searchresultmodel.cpp" line="94"/>
         <source>Name</source>
         <translation>名称</translation>
@@ -2535,5 +2551,27 @@ Do you want to install the update now?</source>
 <message><source>Task download settings</source><translation>任务下载设置</translation></message>
 <message><source>Task settings</source><translation>任务设置</translation></message>
 <message><source>Upload limit</source><translation>上传限速</translation></message>
+</context>
+<context>
+    <name>rats::service::SearchService</name>
+    <message>
+        <source>Close the quotation marks to search for a phrase.</source>
+        <translation>请补齐引号后再搜索短语。</translation>
+    </message>
+    <message>
+        <source>Enter text between the quotation marks.</source>
+        <translation>请在引号内输入要搜索的文字。</translation>
+    </message>
+    <message>
+        <source>Query too short</source>
+        <translation>搜索词太短</translation>
+    </message>
+</context>
+<context>
+    <name>rats::service::MigrationService</name>
+    <message>
+        <source>Rebuilding the search index</source>
+        <translation>正在重建搜索索引</translation>
+    </message>
 </context>
 </TS>

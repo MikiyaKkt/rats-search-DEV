@@ -92,6 +92,7 @@
 #include <QTableView>
 #include <QTextEdit>
 #include <QTimer>
+#include <QUuid>
 #include <QToolButton>
 #include <QUrl>
 #include <QUrlQuery>
@@ -241,6 +242,11 @@ void MainWindow::setupUi()
     if (app_ && app_->config())
         safeSearchCheckBox->setChecked(app_->config()->safeSearch());
 
+    fuzzySearchCheckBox = new QCheckBox(tr("Fuzzy"), this);
+    fuzzySearchCheckBox->setObjectName(QStringLiteral("fuzzySearchCheckBox"));
+    fuzzySearchCheckBox->setToolTip(tr("Include results with one typo in a search word"));
+    fuzzySearchCheckBox->setCursor(Qt::PointingHandCursor);
+
     sortComboBox = new QComboBox(this);
     sortComboBox->addItem(tr("Sort: Seeders ↓"), "seeders_desc");
     sortComboBox->addItem(tr("Sort: Seeders ↑"), "seeders_asc");
@@ -260,6 +266,7 @@ void MainWindow::setupUi()
     searchLayout->addWidget(typeComboBox);
     searchLayout->addWidget(filtersButton);
     searchLayout->addWidget(safeSearchCheckBox);
+    searchLayout->addWidget(fuzzySearchCheckBox);
     searchLayout->addWidget(sortComboBox);
     searchLayout->addWidget(searchButton);
 
@@ -576,6 +583,10 @@ void MainWindow::connectSearchSignals()
         if (!currentSearchQuery_.isEmpty())
             performSearch(currentSearchQuery_);
     });
+    connect(fuzzySearchCheckBox, &QCheckBox::toggled, this, [this] {
+        if (!currentSearchQuery_.isEmpty())
+            performSearch(currentSearchQuery_);
+    });
 
     connect(resultsTableView->selectionModel(), &QItemSelectionModel::currentRowChanged, this,
         [this](const QModelIndex& current, const QModelIndex&) { onTorrentSelected(current); });
@@ -822,8 +833,8 @@ void MainWindow::connectPeerSignals()
 
     // Remote torrent search hits stream into the search-results model.
     connect(peerApi, &rats::peer::PeerApi::remoteSearchResults, this,
-        [this](const QString& /*query*/, const QJsonArray& torrents) {
-            if (currentSearchQuery_.isEmpty())
+        [this](const QString& searchId, const QJsonArray& torrents) {
+            if (currentSearchId_.isEmpty() || (!searchId.isEmpty() && searchId != currentSearchId_))
                 return;
             for (const QJsonValue& val : torrents) {
                 SearchHit hit = codec::searchHitFromJson(val.toObject());
@@ -834,8 +845,8 @@ void MainWindow::connectPeerSignals()
 
     // Remote file-search hits.
     connect(peerApi, &rats::peer::PeerApi::remoteFileSearchResults, this,
-        [this](const QString& /*query*/, const QJsonArray& torrents) {
-            if (currentSearchQuery_.isEmpty())
+        [this](const QString& searchId, const QJsonArray& torrents) {
+            if (currentSearchId_.isEmpty() || (!searchId.isEmpty() && searchId != currentSearchId_))
                 return;
             for (const QJsonValue& val : torrents) {
                 SearchHit hit = codec::searchHitFromJson(val.toObject());
@@ -1010,10 +1021,17 @@ void MainWindow::resetSearchFilters()
 
 void MainWindow::performSearch(const QString& query)
 {
-    if (query.isEmpty())
+    if (query.trimmed().isEmpty())
         return;
+    if (const QString error = SearchService::queryError(query); !error.isEmpty()) {
+        showStatusMessage(error, 5000);
+        return;
+    }
 
     currentSearchQuery_ = query;
+    const QString searchId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    currentSearchId_ = searchId;
+    const QString dhtHash = SearchService::extractInfoHash(query);
     // Remember what the user searched for (a no-op while history is disabled).
     if (app_->searchHistory())
         app_->searchHistory()->add(query);
@@ -1040,6 +1058,7 @@ void MainWindow::performSearch(const QString& query)
     req.sort = sort;
     req.descending = sortData.endsWith("desc");
     req.safeSearch = safeSearchCheckBox->isChecked();
+    req.fuzzy = fuzzySearchCheckBox->isChecked();
     req.contentType = typeComboBox->currentData().toString();
 
     const SearchFilters filters = currentSearchFilters();
@@ -1058,7 +1077,7 @@ void MainWindow::performSearch(const QString& query)
     showStatusMessage(tr("✅ Found %n torrent(s)", nullptr, static_cast<int>(hits.size())), 3000);
 
     // Local file search — merged in as file-match results.
-    if (app_->search()) {
+    if (dhtHash.isEmpty() && app_->search()) {
         QVector<SearchHit> fileHits = app_->search()->searchFiles(req);
         if (!fileHits.isEmpty()) {
             searchResultModel->addFileResults(fileHits);
@@ -1067,47 +1086,15 @@ void MainWindow::performSearch(const QString& query)
         }
     }
 
-    // Ask connected peers as well; their answers stream back via peerApi signals.
-    if (app_->transport() && app_->transport()->isRunning() && query.length() > 2) {
-        QJsonObject msg;
-        msg["query"] = query;
-        msg["text"] = query;
-        msg["limit"] = 50;
-        msg["orderBy"] = sort;
-        msg["orderDesc"] = req.descending;
-        msg["safeSearch"] = req.safeSearch;
-        if (!req.contentType.isEmpty())
-            msg["type"] = req.contentType;
-        // Ranges travel in the same {min,max} shape the REST router takes. An
-        // unset bound is left out entirely rather than sent as 0, so a peer that
-        // does read them cannot mistake "any" for "at least nothing".
-        if (filters.sizeMin > 0 || filters.sizeMax > 0) {
-            QJsonObject size;
-            if (filters.sizeMin > 0)
-                size["min"] = filters.sizeMin;
-            if (filters.sizeMax > 0)
-                size["max"] = filters.sizeMax;
-            msg["size"] = size;
-        }
-        if (filters.filesMin > 0 || filters.filesMax > 0) {
-            QJsonObject files;
-            if (filters.filesMin > 0)
-                files["min"] = filters.filesMin;
-            if (filters.filesMax > 0)
-                files["max"] = filters.filesMax;
-            msg["files"] = files;
-        }
-        app_->transport()->broadcastMessage("searchTorrent", msg);
-        app_->transport()->broadcastMessage("searchFiles", msg);
-    }
+    if (app_->peerApi())
+        app_->peerApi()->requestSearch(searchId, req);
 
     // DHT fallback: an info-hash query (bare hash OR a magnet link) that isn't
     // indexed locally — pull the metadata from the DHT and add it as a result.
-    const QString dhtHash = SearchService::extractInfoHash(query);
     if (hits.isEmpty() && !dhtHash.isEmpty() && app_->api()) {
         app_->api()->call(
-            "torrent.get", QJsonObject { { "hash", dhtHash }, { "files", true } }, [this, query](const Result& result) {
-                if (!result.ok() || currentSearchQuery_ != query)
+            "torrent.get", QJsonObject { { "hash", dhtHash }, { "files", true } }, [this, searchId](const Result& result) {
+                if (!result.ok() || currentSearchId_ != searchId)
                     return;
                 Torrent t = codec::torrentFromJson(result.data().toObject());
                 if (t.isValid()) {

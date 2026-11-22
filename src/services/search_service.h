@@ -27,6 +27,7 @@ public:
         QString sort;
         bool descending = true;
         bool safeSearch = false;
+        bool fuzzy = false;
         QString contentType;
         qint64 sizeMin = 0;
         qint64 sizeMax = 0;
@@ -43,11 +44,14 @@ public:
     QVector<domain::Torrent> top(const QString& type, const QString& time, int offset, int limit);
     std::optional<domain::Torrent> get(const QString& hash, bool includeFiles = true);
 
+    // Shared validation for the desktop and REST. The REST file endpoint
+    // retains its historical minimum length for non-CJK/Thai queries.
+    static QString queryError(const QString& query, bool requireLongQuery = false);
+    static bool canSendLegacyQuery(const QString& query);
+
     // Extracts a normalized (lower-case) 40-hex info-hash from a search query,
     // accepting both a bare hash and a full "magnet:?xt=urn:btih:..." link.
-    // Returns an empty string if the query carries no info-hash. This is the
-    // single place the search path recognizes "this query is a torrent hash", so
-    // a magnet link resolves via the DHT fallback exactly like a bare hash.
+    // Hashes embedded in ordinary text or quotes are full-text search terms.
     static QString extractInfoHash(const QString& query);
 
 private:

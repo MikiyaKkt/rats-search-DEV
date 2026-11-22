@@ -1,7 +1,10 @@
 #include "services/search_service.h"
 
 #include "common/infohash.h"
-#include "net/torrent_engine.h"
+#include "data/query.h"
+
+#include <QUrl>
+#include <QUrlQuery>
 
 namespace rats::service {
 
@@ -12,11 +15,48 @@ SearchService::SearchService(data::TorrentRepository* repository, QObject* paren
 
 QString SearchService::extractInfoHash(const QString& query)
 {
-    // parseInfoHash accepts a bare hex hash or a magnet link and returns an empty
-    // string when the query carries no hash (base32 hashes are not decoded).
-    // Normalize so callers can match it against the lower-case hashes in the index.
-    const QString hash = net::TorrentEngine::parseInfoHash(query.trimmed());
-    return infohash::isValid(hash) ? infohash::normalize(hash) : QString();
+    const QString text = query.trimmed();
+    if (infohash::isValid(text))
+        return infohash::normalize(text);
+    if (!text.startsWith(QLatin1String("magnet:?"), Qt::CaseInsensitive))
+        return {};
+    const QLatin1String prefix("urn:btih:");
+    const QUrlQuery magnet{ QUrl(text) };
+    for (const auto& [key, value] : magnet.queryItems(QUrl::FullyDecoded)) {
+        if (key.compare(QLatin1String("xt"), Qt::CaseInsensitive) == 0 && value.startsWith(prefix, Qt::CaseInsensitive)) {
+            const QString hash = value.mid(prefix.size());
+            if (infohash::isValid(hash))
+                return infohash::normalize(hash);
+        }
+    }
+    return {};
+}
+
+QString SearchService::queryError(const QString& query, bool requireLongQuery)
+{
+    if (!requireLongQuery && !extractInfoHash(query).isEmpty())
+        return {};
+
+    using data::FullTextQuery;
+    switch (FullTextQuery::parse(query).error()) {
+    case FullTextQuery::Error::UnclosedQuote:
+        return tr("Close the quotation marks to search for a phrase.");
+    case FullTextQuery::Error::EmptyPhrase:
+        return tr("Enter text between the quotation marks.");
+    case FullTextQuery::Error::None:
+        break;
+    }
+
+    if (requireLongQuery && query.size() <= 2 && !FullTextQuery::allowsShortQuery(query))
+        return tr("Query too short");
+    return {};
+}
+
+bool SearchService::canSendLegacyQuery(const QString& query)
+{
+    const auto parsed = data::FullTextQuery::parse(query);
+    return query.size() > 2 && parsed.error() == data::FullTextQuery::Error::None && !parsed.isEmpty()
+        && !parsed.hasExactPhrase() && parsed.continuousTerms().isEmpty();
 }
 
 data::TorrentRepository::SearchQuery SearchService::toRepositoryQuery(const Request& r)
@@ -28,6 +68,7 @@ data::TorrentRepository::SearchQuery SearchService::toRepositoryQuery(const Requ
     q.sort = r.sort;
     q.descending = r.descending;
     q.safeSearch = r.safeSearch;
+    q.fuzzy = r.fuzzy;
     q.contentType = r.contentType;
     q.sizeMin = r.sizeMin;
     q.sizeMax = r.sizeMax;
@@ -38,12 +79,19 @@ data::TorrentRepository::SearchQuery SearchService::toRepositoryQuery(const Requ
 
 QVector<domain::SearchHit> SearchService::searchTorrents(const Request& request)
 {
-    return repository_->searchTorrents(toRepositoryQuery(request));
+    auto query = toRepositoryQuery(request);
+    const QString hash = extractInfoHash(request.query);
+    if (!hash.isEmpty())
+        query.text = hash;
+    return repository_->searchTorrents(query);
 }
 
 QVector<domain::SearchHit> SearchService::searchFiles(const Request& request)
 {
-    return repository_->searchFiles(toRepositoryQuery(request));
+    auto query = toRepositoryQuery(request);
+    if (query.fuzzy && !extractInfoHash(request.query).isEmpty())
+        query.fuzzy = false;
+    return repository_->searchFiles(query);
 }
 
 QVector<domain::Torrent> SearchService::recent(int limit)

@@ -9,7 +9,9 @@
  */
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
 #include <QTemporaryDir>
@@ -24,14 +26,18 @@
 #include "data/torrent_repository.h"
 #include "domain/content.h"
 #include "domain/torrent.h"
+#include "domain/torrent_codec.h"
 #include "services/database_dump.h"
 #include "services/database_exporter.h"
 #include "services/database_importer.h"
 #include "services/filter_policy.h"
 #include "services/indexing_service.h"
+#include "services/migration_service.h"
 #include "services/crawler_pipeline.h"
+#include "services/search_service.h"
 #include <thread>
 #include <atomic>
+#include <algorithm>
 
 using rats::data::Database;
 using rats::data::Manticore;
@@ -55,6 +61,11 @@ private slots:
     void testGetWithFiles();
     void testSearchByName();
     void testSearchByHash();
+    void testSearchQuerySyntax();
+    void testFileSearchFiltersAndPages();
+    void testSearchReindexResumes();
+    void testFuzzySearchMode();
+    void testFuzzySearchBudget();
     void testUpdateTrackerCounts();
     void testStatistics();
     void testRecent();
@@ -494,6 +505,93 @@ void TestManticoreQueries::testSearchByHash()
     QCOMPARE(hits.first().torrent.hash, t.hash);
 }
 
+void TestManticoreQueries::testSearchQuerySyntax()
+{
+    using rats::service::SearchService;
+    const QString movie = QStringLiteral("\u7535\u5f71");
+    const QString separated = QStringLiteral("\u7535-\u5f71");
+    const QString reversed = QStringLiteral("\u5f71\u7535");
+    const QString plainTitle = QStringLiteral("StageZ Ubuntu Linux Archive");
+    Torrent valid = makeTorrent(91011, movie + " 1080p " + plainTitle, ContentType::Video, 1234, 23);
+    Torrent split = makeTorrent(91012, separated + " 1080p StageZ Ubuntux Linux Archive", ContentType::Video, 1234, 55);
+    split.info.insert("name", QString(800, u'x') + movie); // beyond the name-index cutoff
+    Torrent wrongOrder = makeTorrent(91013, reversed + " 1080p StageZ Linux Ubuntu Archive");
+    Torrent fromInfo = makeTorrent(91014, "Metadata StageZ");
+    fromInfo.info.insert("name", movie);
+    valid.fileList = { { QStringLiteral("clip/") + movie + QStringLiteral(".1080p Ubuntu Linux.mkv"), 1234 } };
+    split.fileList = { { QStringLiteral("clip/") + separated + QStringLiteral(".1080p Ubuntux Linux.mkv"), 1234 } };
+    wrongOrder.fileList = { { QStringLiteral("clip/") + reversed + QStringLiteral(".1080p Linux Ubuntu.mkv"), wrongOrder.size } };
+    for (const auto& torrent : { valid, split, wrongOrder, fromInfo }) {
+        QVERIFY(repo_->add(torrent));
+        QVERIFY(waitForTorrent(torrent.hash));
+        if (!torrent.fileList.isEmpty())
+            QVERIFY(waitForFiles(torrent.hash, 1));
+    }
+
+    SearchService search(repo_);
+    SearchService::Request request;
+    auto hashes = [](const auto& hits) {
+        QStringList result;
+        for (const auto& hit : hits)
+            result.append(hit.torrent.hash);
+        return result;
+    };
+    request.sort = "seeders";
+    request.limit = 1;
+    request.contentType = "video";
+    request.sizeMin = 1234;
+    request.sizeMax = 1234;
+    request.query = movie + " 1080p";
+    QCOMPARE(hashes(search.searchTorrents(request)), QStringList{ valid.hash });
+    request.query = QStringLiteral("1080p\u3000") + movie;
+    QCOMPARE(hashes(search.searchTorrents(request)), QStringList{ valid.hash });
+    request.limit = 10;
+    QCOMPARE(hashes(search.searchFiles(request)), QStringList{ valid.hash });
+
+    request = SearchService::Request{};
+    request.query = movie;
+    QStringList names = hashes(search.searchTorrents(request));
+    names.sort();
+    QStringList expected{ valid.hash, fromInfo.hash };
+    expected.sort();
+    QCOMPARE(names, expected);
+    const auto fileHits = search.searchFiles(request);
+    QCOMPARE(hashes(fileHits), QStringList{ valid.hash });
+    QVERIFY(fileHits.front().matchingPaths.front().contains(QStringLiteral("<b>") + movie + QStringLiteral("</b>")));
+    QVERIFY(SearchService::queryError(movie, true).isEmpty());
+    QVERIFY(!SearchService::queryError(QStringLiteral("ab"), true).isEmpty());
+    const QString unclosed = QStringLiteral("\"Ubuntu");
+    QVERIFY(!SearchService::queryError(unclosed).isEmpty());
+    QCOMPARE(SearchService::queryError(unclosed), SearchService::queryError(unclosed, true));
+    QVERIFY(!SearchService::queryError(QStringLiteral("\u201c \u201d")).isEmpty());
+
+    request.query = QStringLiteral("\"Ubuntu Linux\" archiv StageZ");
+    QCOMPARE(hashes(search.searchTorrents(request)), QStringList{ valid.hash });
+    request.query = QStringLiteral("\u201cUbuntu Linux\u201d clip");
+    QCOMPARE(hashes(search.searchFiles(request)), QStringList{ valid.hash });
+    request.query = QStringLiteral("\"ubun* linux\" StageZ");
+    QVERIFY(search.searchTorrents(request).isEmpty());
+    request.query = QStringLiteral("ubun* occupancynotpresent");
+    QVERIFY(search.searchTorrents(request).isEmpty());
+    request.query = QStringLiteral("ubun* StageZ");
+    QCOMPARE(search.searchTorrents(request).size(), 3);
+
+    request.query = "  " + valid.hash.toUpper() + "  ";
+    QCOMPARE(hashes(search.searchTorrents(request)), QStringList{ valid.hash });
+    request.query = "magnet:?dn=Name&xt=urn:btih:" + valid.hash.toUpper();
+    QCOMPARE(SearchService::extractInfoHash(request.query), valid.hash);
+    QCOMPARE(hashes(search.searchTorrents(request)), QStringList{ valid.hash });
+    const QString encodedMagnet = "MAGNET:?dn=" + split.hash + "&xt=urn:btmh:unused&XT=URN%3ABTIH%3A" + valid.hash;
+    QCOMPARE(SearchService::extractInfoHash(encodedMagnet), valid.hash);
+    request.query = QLatin1Char('"') + valid.hash + QLatin1Char('"');
+    QVERIFY(SearchService::extractInfoHash(request.query).isEmpty());
+    QVERIFY(search.searchTorrents(request).isEmpty());
+    QVERIFY(SearchService::extractInfoHash(QStringLiteral("reference ") + valid.hash).isEmpty());
+
+    for (const auto& torrent : { valid, split, wrongOrder, fromInfo })
+        QVERIFY(repo_->remove(torrent.hash));
+}
+
 void TestManticoreQueries::testUpdateTrackerCounts()
 {
     const Torrent t = makeTorrent(1, "x");
@@ -504,6 +602,393 @@ void TestManticoreQueries::testUpdateTrackerCounts()
     QCOMPARE(got->seeders, 111);
     QCOMPARE(got->leechers, 22);
     QCOMPARE(got->completed, 3);
+}
+
+void TestManticoreQueries::testFileSearchFiltersAndPages()
+{
+    QVector<Torrent> entries;
+    constexpr int count = 1134;
+    for (int index = 0; index < count; ++index)
+        entries.append(makeTorrent(936000 + index, "Stage3 path search", ContentType::Video, 4096));
+    const auto id = [](const Torrent& t) { return rats::data::rowIdFromHash(t.hash); };
+    std::sort(entries.begin(), entries.end(), [&](const Torrent& a, const Torrent& b) { return id(a) < id(b); });
+    for (int index = 0; index < count; ++index) {
+        Torrent& entry = entries[index];
+        entry.files = 2;
+        entry.fileList = { { "folder/phase3needle", 2000 }, { "edition.mkv", 2096 } };
+        if (index < 1024)
+            entry.contentCategory = ContentCategory::XXX;
+    }
+    const QString longPath = QStringLiteral("folder/") + QString(500, u'x') + "/phase3needle edition.mkv";
+    for (int i : { 128, 1040, 1080, 1132, 1133 }) {
+        entries[i].fileList = { { longPath, 2000 }, { "unmatched/<b>literal</b>.txt", 2096 } };
+        entries[i].seeders = 21;
+    }
+    entries[1040].name = "Alpha";
+    entries[1080].name = "Omega";
+    entries[1080].seeders = 45;
+    entries[1132].name = "Beta";
+    entries[1133].name = "Delta";
+    entries[1133].contentType = ContentType::Audio;
+    QCOMPARE(repo_->addMany(entries), count);
+
+    auto hashes = [](const auto& hits) {
+        QStringList result;
+        for (const auto& hit : hits)
+            result.append(hit.torrent.hash);
+        return result;
+    };
+    TorrentRepository::SearchQuery query;
+    query.text = "phase3needle edition";
+    query.safeSearch = true;
+    query.contentType = "video";
+    query.sizeMin = 4096;
+    query.filesMax = 2;
+    query.sort = "seeders";
+    query.limit = 2;
+    QElapsedTimer timer;
+    timer.start();
+    const auto first = repo_->searchFiles(query);
+    qInfo() << "File search, first filtered sorted page:" << timer.elapsed() << "ms";
+    const QStringList firstExpected{ entries[1080].hash, entries[1040].hash };
+    QCOMPARE(hashes(first), firstExpected);
+    for (const auto& hit : first) {
+        QCOMPARE(hit.matchingPaths.size(), 1);
+        const QString unmarked = QString(hit.matchingPaths.front()).remove("<b>").remove("</b>");
+        QCOMPARE(unmarked, longPath);
+        QVERIFY(hit.torrent.fileList.isEmpty());
+    }
+    query.offset = 2;
+    QCOMPARE(hashes(repo_->searchFiles(query)), QStringList{ entries[1132].hash });
+    query.offset = 0;
+    query.limit = 10;
+    const QStringList allExpected{ entries[1080].hash, entries[1040].hash, entries[1132].hash };
+    QCOMPARE(hashes(repo_->searchFiles(query)), allExpected);
+    query.sort = "name";
+    query.descending = false;
+    query.text = "\"phase3needle edition\"";
+    const QStringList byName{ entries[1040].hash, entries[1132].hash, entries[1080].hash };
+    QCOMPARE(hashes(repo_->searchFiles(query)), byName);
+
+    query = TorrentRepository::SearchQuery{};
+    query.text = "phase3needle";
+    query.offset = 1025;
+    query.limit = 4;
+    QStringList deepPage;
+    for (int i = query.offset; i < query.offset + query.limit; ++i)
+        deepPage.append(entries[i].hash);
+    timer.restart();
+    const auto deep = repo_->searchFiles(query);
+    qInfo() << "File search, unfiltered deep page:" << timer.elapsed() << "ms";
+    QCOMPARE(hashes(deep), deepPage);
+
+    for (const Torrent& entry : entries)
+        QVERIFY(repo_->remove(entry.hash));
+}
+
+void TestManticoreQueries::testSearchReindexResumes()
+{
+    class MigrationDatabase : public Database {
+    public:
+        using Database::Database;
+        int titleBatches = 0;
+        int fileBatches = 0;
+        bool failSecondFiles = false;
+    protected:
+        bool runWrite(const QString& sql, const char* operation, const QString& table) override
+        {
+            if (qstrcmp(operation, "REPLACE") == 0) {
+                if (table == "torrents")
+                    ++titleBatches;
+                if (table == "files" && ++fileBatches == 2 && failSecondFiles) {
+                    // Simulate a lost acknowledgment after the engine applied
+                    // this page. The checkpoint must stay at the prior page.
+                    Database::runWrite(sql, operation, table);
+                    return false;
+                }
+            }
+            return Database::runWrite(sql, operation, table);
+        }
+    };
+
+    QTemporaryDir oldData;
+    QVERIFY(oldData.isValid());
+    Manticore engine(oldData.path());
+    QVERIFY(engine.start());
+    MigrationDatabase database(&engine);
+    TorrentRepository repository(&database);
+    QFile config(oldData.filePath("sphinx.conf"));
+    QVERIFY(config.open(QIODevice::ReadOnly));
+    QByteArray legacy = config.readAll();
+    config.close();
+    for (const QByteArray& line : { QByteArray("    charset_table = non_cont"), QByteArray("    ngram_len = 1"),
+             QByteArray("    ngram_chars = cont") })
+        legacy.replace(line, "");
+    QVERIFY(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(config.write(legacy), legacy.size());
+    config.close();
+    QVERIFY(database.execute("ALTER TABLE torrents RECONFIGURE"));
+    QVERIFY(database.execute("ALTER TABLE files RECONFIGURE"));
+
+    constexpr int count = 505;
+    const QString movie = QStringLiteral("\u7535\u5f71");
+    QVector<Torrent> samples;
+    for (int i = 0; i < count; ++i) {
+        Torrent t = makeTorrent(949000 + i, movie + QString(" Migration fixture %1").arg(i), ContentType::Video, 1200, i);
+        t.hash[0] = u'6'; // exercises 63-bit cursors above JSON's double precision
+        t.info.insert("name", QStringLiteral("\u526a\u8f91\u7248"));
+        t.info.insert("custom", QStringLiteral("kept 'exactly'"));
+        t.good = 3;
+        t.bad = 4;
+        t.trackersChecked = QDateTime::fromSecsSinceEpoch(1700000000);
+        t.fileList = { { QStringLiteral("root/") + movie + QStringLiteral(".mkv"), 1200 } };
+        samples.append(t);
+    }
+    Torrent missingFiles = makeTorrent(950000, movie + " summary");
+    const Torrent emptyFileRow = makeTorrent(950002, movie + " empty file row");
+    samples.append(missingFiles);
+    samples.append(emptyFileRow);
+    QCOMPARE(repository.addMany(samples), count + 2);
+    QVERIFY(database.replace("files", { { "id", rats::data::rowIdFromHash(emptyFileRow.hash) },
+        { "hash", emptyFileRow.hash }, { "path", QStringLiteral("") }, { "size", QStringLiteral("") } }));
+    QVERIFY(database.execute("FLUSH RAMCHUNK torrents"));
+    QVERIFY(database.execute("FLUSH RAMCHUNK files"));
+    TorrentRepository::SearchQuery query;
+    query.text = movie;
+    QVERIFY(repository.searchTorrents(query).isEmpty());
+    QVERIFY(repository.searchFiles(query).isEmpty());
+    const auto readTitles = [&] { return database.query("SELECT * FROM torrents ORDER BY id ASC LIMIT 600"); };
+    const auto readFiles = [&] { return database.query("SELECT * FROM files ORDER BY id ASC LIMIT 600"); };
+    const auto oldTitles = readTitles();
+    const auto oldFiles = readFiles();
+    const auto oldEmptyFileCount = repository.filesOf(emptyFileRow.hash).size();
+    QCOMPARE(oldTitles.size(), count + 2);
+    QCOMPARE(oldFiles.size(), count + 1);
+    QVERIFY(oldTitles[499].value("id").toLongLong() > 9007199254740991LL);
+    QVERIFY(oldFiles[499].value("id").toLongLong() > 9007199254740991LL);
+    engine.stop();
+    QVERIFY(engine.start()); // production startup writes the new configuration
+
+    const auto state = [&] {
+        QFile file(oldData.filePath("migrations.json"));
+        if (!file.open(QIODevice::ReadOnly))
+            return QJsonObject{};
+        return QJsonDocument::fromJson(file.readAll()).object();
+    };
+    QElapsedTimer timer;
+    timer.start();
+    database.titleBatches = database.fileBatches = 0;
+    {
+        rats::service::MigrationService migration(oldData.path(), &database, &repository, nullptr);
+        connect(&migration, &rats::service::MigrationService::migrationProgress, this,
+            [&](const QString&, qint64 current, qint64) {
+                if (current == 500)
+                    migration.shutdown();
+            });
+        QVERIFY(!migration.runSyncMigrations());
+        QVERIFY(!migration.searchIndexReady());
+    }
+    QCOMPARE(database.titleBatches, 1);
+    QCOMPARE(database.fileBatches, 0);
+    auto checkpoints = state().value("searchReindex").toObject();
+    QCOMPARE(checkpoints.value("torrents").toObject().value("afterId").toString(),
+        oldTitles[499].value("id").toString());
+    QCOMPARE(checkpoints.value("torrents").toObject().value("rows").toInteger(), 500);
+
+    database.titleBatches = database.fileBatches = 0;
+    database.failSecondFiles = true;
+    {
+        rats::service::MigrationService migration(oldData.path(), &database, &repository, nullptr);
+        QVERIFY(!migration.runSyncMigrations());
+        QVERIFY(!migration.searchIndexReady());
+    }
+    QCOMPARE(database.titleBatches, 1);
+    QCOMPARE(database.fileBatches, 2);
+    checkpoints = state().value("searchReindex").toObject();
+    QVERIFY(checkpoints.value("torrents").toObject().value("complete").toBool());
+    QCOMPARE(checkpoints.value("files").toObject().value("rows").toInteger(), 500);
+    QCOMPARE(checkpoints.value("files").toObject().value("afterId").toString(),
+        oldFiles[499].value("id").toString());
+
+    engine.stop();
+    QVERIFY(engine.start());
+    database.titleBatches = database.fileBatches = 0;
+    database.failSecondFiles = false;
+    {
+        rats::service::MigrationService migration(oldData.path(), &database, &repository, nullptr);
+        QVERIFY(migration.runSyncMigrations());
+        QVERIFY(migration.searchIndexReady());
+        QVERIFY(migration.runSyncMigrations());
+    }
+    qInfo() << "Search reindex with deliberate interruption, failed batch and daemon restart:" << timer.elapsed() << "ms";
+    QCOMPARE(database.titleBatches, 0);
+    QCOMPARE(database.fileBatches, 1);
+    QCOMPARE(readTitles(), oldTitles);
+    QCOMPARE(readFiles(), oldFiles);
+    const auto completed = state();
+    QVERIFY(completed.contains("completedMigrations"));
+    QVERIFY(!completed.contains("searchReindex"));
+    query.limit = 600;
+    QCOMPARE(repository.searchTorrents(query).size(), count + 2);
+    QCOMPARE(repository.searchFiles(query).size(), count);
+    QVERIFY(repository.filesOf(missingFiles.hash).isEmpty());
+    QCOMPARE(repository.filesOf(emptyFileRow.hash).size(), oldEmptyFileCount);
+    Torrent later = makeTorrent(950001, movie + " post-migration");
+    later.fileList = { { movie + ".mkv", later.size } };
+    QVERIFY(repository.add(later));
+    QCOMPARE(repository.searchFiles(query).size(), count + 1);
+}
+
+void TestManticoreQueries::testFuzzySearchMode()
+{
+    using rats::service::SearchService;
+    const QString correctMovie = QStringLiteral("\u661f\u9645\u7a7f\u8d8a");
+    const QString mistypedMovie = QStringLiteral("\u661f\u9645\u7a7f\u60a6");
+    Torrent exact = makeTorrent(962001, "Ubntu Linux StageFour", ContentType::Video, 1200, 5);
+    Torrent corrected = makeTorrent(962002, "Ubuntu Linux StageFour", ContentType::Video, 1200, 20);
+    Torrent wrongPhrase = makeTorrent(962003, "Ubuntu Linux Classic StageFour", ContentType::Video, 1200, 35);
+    Torrent split = makeTorrent(962004, "File search fixture", ContentType::Video, 1200, 40);
+    Torrent excluded = makeTorrent(962005, "Ubuntu Linux StageFour", ContentType::Video, 1200, 100);
+    excluded.contentCategory = ContentCategory::XXX;
+    Torrent reordered = makeTorrent(962006, "Linux Ubuntu StageFour", ContentType::Video, 1200, 20);
+    Torrent foreign = makeTorrent(962007, correctMovie + " StageFour", ContentType::Video, 1200, 7);
+    Torrent foreignDecoy = makeTorrent(962008, QStringLiteral("\u592a\u7a7a\u7a7f\u60a6 StageFour"));
+    Torrent overlap = makeTorrent(962009, "Ubntu Ubuntu StageOverlap");
+    for (Torrent* torrent : { &exact, &corrected, &wrongPhrase, &excluded, &reordered, &foreign, &foreignDecoy, &overlap })
+        torrent->fileList = { { "root/" + torrent->name + ".mkv", torrent->size } };
+    split.files = 2;
+    split.fileList = { { "Ubuntu", 600 }, { "Linux StageFour.mkv", 600 } };
+    const QVector<Torrent> fixture{ exact, corrected, wrongPhrase, split, excluded, reordered, foreign, foreignDecoy, overlap };
+    QCOMPARE(repo_->addMany(fixture), fixture.size());
+
+    SearchService search(repo_);
+    SearchService::Request request;
+    request.sort = "seeders";
+    request.safeSearch = true;
+    request.query = "\"Linux StageFour\" ubntu";
+    const QStringList ordered{ exact.hash, corrected.hash };
+    const auto hashes = [](const auto& hits) {
+        QStringList result;
+        for (const auto& hit : hits)
+            result.append(hit.torrent.hash);
+        return result;
+    };
+    for (bool files : { false, true }) {
+        const auto run = [&](const SearchService::Request& req) {
+            return files ? search.searchFiles(req) : search.searchTorrents(req);
+        };
+        QCOMPARE(hashes(run(request)), QStringList{ exact.hash });
+        auto fuzzy = request;
+        fuzzy.fuzzy = true;
+        auto hits = run(fuzzy);
+        QCOMPARE(hashes(hits), ordered);
+        QVERIFY(!hits.front().fuzzy);
+        QVERIFY(hits.back().fuzzy);
+        const auto json = rats::domain::codec::toJson(hits.back());
+        QVERIFY(json.value("fuzzy").toBool());
+        QVERIFY(rats::domain::codec::searchHitFromJson(json).fuzzy);
+        QVERIFY(!rats::domain::codec::toJson(hits.front()).contains("fuzzy"));
+        if (files) {
+            QCOMPARE(hits.back().matchingPaths.size(), 1);
+            QVERIFY(hits.back().matchingPaths.front().contains("Ubuntu"));
+        }
+        fuzzy.limit = 1;
+        QCOMPARE(hashes(run(fuzzy)), QStringList{ exact.hash });
+        fuzzy.offset = 1;
+        QCOMPARE(hashes(run(fuzzy)), QStringList{ corrected.hash });
+        fuzzy.offset = 2;
+        QVERIFY(run(fuzzy).isEmpty());
+        fuzzy = request;
+        fuzzy.fuzzy = true;
+        for (const QString& spelling : { QStringLiteral("xbuntu"), QStringLiteral("uubuntu") }) {
+            fuzzy.query = "\"Linux StageFour\" " + spelling;
+            QCOMPARE(hashes(run(fuzzy)), QStringList{ corrected.hash });
+        }
+        fuzzy.query = "\"StageFour\" " + mistypedMovie;
+        QCOMPARE(hashes(run(fuzzy)), QStringList{ foreign.hash });
+        fuzzy.query = "\"StageFour\" xbuntu linx";
+        QVERIFY(run(fuzzy).isEmpty());
+        fuzzy.query = "\"ubntu Linux\"";
+        QCOMPARE(hashes(run(fuzzy)), QStringList{ exact.hash });
+        fuzzy.query = "\"Linux StageFour\" xbunt*";
+        QVERIFY(run(fuzzy).isEmpty());
+        fuzzy.query = "\"StageOverlap\" ubntu";
+        hits = run(fuzzy);
+        QCOMPARE(hashes(hits), QStringList{ overlap.hash });
+        QVERIFY(!hits.front().fuzzy);
+        fuzzy.query = "\"Linux StageFour\" ub";
+        auto off = fuzzy;
+        off.fuzzy = false;
+        QCOMPARE(hashes(run(fuzzy)), hashes(run(off)));
+        if (!files) {
+            fuzzy.query = corrected.magnetLink();
+            hits = run(fuzzy);
+            QCOMPARE(hashes(hits), QStringList{ corrected.hash });
+            QVERIFY(!hits.front().fuzzy);
+        }
+
+        QVector<qint64> times;
+        auto measured = request;
+        measured.fuzzy = true;
+        for (int i = 0; i < 26; ++i) {
+            QElapsedTimer timer;
+            timer.start();
+            hits = run(measured);
+            if (i > 0)
+                times.append(timer.nsecsElapsed());
+        }
+        std::sort(times.begin(), times.end());
+        qInfo() << "Fuzzy warm fixture p95" << (files ? "files" : "titles") << times[23] / 1000000.0 << "ms";
+    }
+    for (const auto& torrent : fixture)
+        QVERIFY(repo_->remove(torrent.hash));
+}
+
+void TestManticoreQueries::testFuzzySearchBudget()
+{
+    constexpr int count = 90;
+    QVector<Torrent> fixture;
+    for (int i = 0; i < count; ++i)
+        fixture.append(makeTorrent(964000 + i, "Ubuntu FuzzyBudgetFixture"));
+    const auto exact = makeTorrent(965000, "Xbuntu FuzzyBudgetFixture");
+    fixture.append(exact);
+    QCOMPARE(repo_->addMany(fixture), fixture.size());
+    TorrentRepository::SearchQuery query;
+    query.text = "xbuntu \"FuzzyBudgetFixture\"";
+    query.fuzzy = true;
+    query.limit = 100;
+    const auto hits = repo_->searchTorrents(query);
+    QCOMPARE(hits.size(), 65);
+    QCOMPARE(hits.front().torrent.hash, exact.hash);
+    QVERIFY(!hits.front().fuzzy);
+    for (qsizetype i = 1; i < hits.size(); ++i)
+        QVERIFY(hits[i].fuzzy);
+    query.offset = 63;
+    query.limit = 5;
+    const auto tail = repo_->searchTorrents(query);
+    QCOMPARE(tail.size(), 2);
+    QCOMPARE(tail[0].torrent.hash, hits[63].torrent.hash);
+    QCOMPARE(tail[1].torrent.hash, hits[64].torrent.hash);
+
+    class DelayedDictionary : public Database {
+    public:
+        using Database::Database;
+        Rows query(const QString& sql, const QVariantList& params, bool* ok) override
+        {
+            if (sql.startsWith(QLatin1String("CALL KEYWORDS")))
+                QThread::msleep(180);
+            return Database::query(sql, params, ok);
+        }
+    } database(manticore_);
+    TorrentRepository delayed(&database);
+    query.offset = 0;
+    query.limit = 100;
+    const auto afterDeadline = delayed.searchTorrents(query);
+    QCOMPARE(afterDeadline.size(), 1);
+    QCOMPARE(afterDeadline.front().torrent.hash, exact.hash);
+    QVERIFY(!afterDeadline.front().fuzzy);
+    for (const auto& torrent : fixture)
+        QVERIFY(repo_->remove(torrent.hash));
 }
 
 void TestManticoreQueries::testStatistics()

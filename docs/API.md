@@ -162,13 +162,18 @@ GET http://localhost:8095/api/search.torrents?text=ubuntu&limit=10
 | `orderBy` (or `sort`) | string | | | Field to order by |
 | `orderDesc` | bool | | `true` | Sort descending |
 | `safeSearch` | bool | | `false` | Enable safe-search filter |
+| `fuzzy` | bool | | `false` | Supplement normal results with one-edit matches |
 | `type` (or `contentType`) | string | | | Content type filter (e.g. `video`, `audio`, `pictures`, `books`, `software`, `games`, `archive`) |
 | `size` | object | | | Size filter in bytes, bounds inclusive: `{"min": 0, "max": 1000000000}`. `0` (or a missing key) leaves that bound unset |
 | `files` | object | | | File count filter, bounds inclusive: `{"min": 1, "max": 100}`. `0` (or a missing key) leaves that bound unset |
 
 **Response** - `data` is an array of torrent objects (see [Torrent Object Format](#torrent-object-format)).
 
-> **Note:** When the query is a bare 40-char info hash and nothing matches locally, a DHT/BEP 9 metadata lookup is attempted automatically; a hit is indexed and returned with `"fromDHT": true`.
+Separate search terms with spaces to require all terms. Use straight double quotes or curly double quotes for a phrase, such as `"Ubuntu Linux"`. Words in a phrase must appear in order and next to each other after tokenization. The `*` wildcard works outside phrases on the torrent name index. An empty phrase or an unmatched quote returns an error.
+
+With `fuzzy=true`, the search may correct one unquoted word of 4 to 24 Unicode code points by inserting, deleting, or replacing one character. This covers English alphabet words and runs of Chinese, Japanese, Korean, or Thai text. Other conditions still apply. Normal results come first and fuzzy hits carry `"fuzzy": true`. Filtering and sorting are applied within each group before the combined result is paginated. Fuzzy matching has a bounded candidate set, so some possible corrections may be omitted.
+
+A bare 40-character Info Hash or a magnet link with a hexadecimal BitTorrent v1 hash is looked up by hash. If it has no local hit, the server attempts a DHT/BEP 9 metadata lookup. A DHT hit is indexed and returned with `"fromDHT": true`.
 
 ---
 
@@ -178,7 +183,9 @@ GET http://localhost:8095/api/search.torrents?text=ubuntu&limit=10
 GET http://localhost:8095/api/search.files?text=readme.txt&limit=10
 ```
 
-Same parameters as `search.torrents`. The query must be longer than 2 characters. The `type`, `safeSearch`, `size` and `files` filters apply to the torrent the matching file belongs to.
+Uses the same search terms and phrases as `search.torrents`. The query must be longer than two characters, or contain a two-character Chinese, Japanese, Korean, or Thai term. The `type`, `safeSearch`, `size` and `files` filters apply to the torrent the matching file belongs to.
+
+All search conditions must match the same file path. The result includes each matching torrent once. Sorting and pagination apply to the matched torrents after filtering. Equal sort values are ordered by the index row ID.
 
 **Response** - torrent objects that matched on a file path, carrying extra fields:
 
@@ -946,6 +953,7 @@ Push events are broadcast to all connected WebSocket clients as `{ "event": name
 | `feedUpdated` | The feed changed | `{ "feed": [ …torrent objects… ] }` |
 | `configChanged` | One or more config keys were written | The full config object plus `"changedKeys": ["filters.adultFilter"]` |
 | `remoteSearchResults` | A peer answered a P2P search | `{ "searchId": "…", "torrents": [ …torrent objects… ] }` |
+| `remoteFileSearchResults` | A peer found matching file paths | `{ "searchId": "…", "torrents": [ …search hits with matchingPaths… ] }` |
 | `torrentRemoveProgress` | Progress of a bulk `torrent.remove` | `{ "processed": 100, "removed": 98, "total": 500 }` |
 | `torrentCleanupProgress` | Progress of a `torrent.cleanup` sweep | `{ "scanned": 5000, "matched": 120, "total": 12045 }` |
 | `databaseSyncStarted` | The **local** export/import/pull began | The status object from `database.status` |
@@ -953,6 +961,12 @@ Push events are broadcast to all connected WebSocket clients as `{ "event": name
 | `databaseSyncFinished` | The local operation ended | The status object plus `"success": true` and, on failure, `"error"` |
 | `databaseServeProgress` | The **serving** lane advanced (snapshot generation, peers waiting/receiving) | The `serve` object from `database.status` |
 | `databaseServeFinished` | One peer's transfer ended | `peer`, `success`, and `reason` when it did not succeed |
+
+The remote search events stream results from a desktop search. The two
+`search.*` query endpoints use the local index. Upgraded Rats peers advertise
+`searchProtocol: 2` in `client_info` and echo the active search ID for title
+and file hits. Legacy peers may return compatible ordinary results with an empty
+`searchId`.
 
 `databaseServe*` is informational. A serving failure means a peer gave up on a
 download from us; it is not a failure of anything the local user started, and
@@ -983,7 +997,7 @@ Most search/torrent methods return objects with these fields (serialized by `rat
 | `info` | object | Scraped extras (poster, description, tracker payloads); included when present |
 | `files_list` | array | `[{ "path", "size" }]`; included when files are requested |
 
-Search hits (`search.torrents` / `search.files`) may additionally carry `fileMatch`, `matchingPaths`, `peer` (source peer id) and `remote` for results found by file name or received from a P2P peer. Results resolved via DHT carry `fromDHT: true`.
+Search hits (`search.torrents` / `search.files`) may additionally carry `fileMatch`, `matchingPaths`, `fuzzy`, `peer` (source peer id) and `remote`. Results resolved via DHT carry `fromDHT: true`.
 
 ---
 
