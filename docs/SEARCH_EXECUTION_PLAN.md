@@ -99,6 +99,15 @@ Windows Release 构建及 32 项 CTest 全部通过，两个 REST 端点通过�
 
 **验收**　新节点之间的两字查询、精确短语、同路径多词、模糊开关和筛选有效。上一轮的新版响应无法进入当前结果。旧节点的普通查询可用。包内程序通过新装及升级冒烟测试，交付可核对的测试结果和性能对照。
 
+**验证结果**
+
+- 两个隔离节点通过回环连接验证了两字中文、精确短语、同路径多词、模糊查找、筛选和路径高亮。用同一关键词变更排序后，上一轮的新版回复被丢弃。重复回复按哈希合并，普通命中优先于同哈希的模糊命中。节点断开后会移除其应答资格。 [双节点测试](../tests/test_peer_search.cpp)
+- 正式 v1.1.0 包能向新版客户端返回兼容英文查询的标题和文件结果。旧节点只处理兼容的普通查询。旧回复缺少查询 ID，也可能缺少查询文本，因此连续提交兼容查询时，无法可靠识别后一轮已发出后才到达的旧回复。
+- Windows x64 MinGW 的 33 项 CTest 全部通过，耗时 127.28 秒。`RatsSearch-Windows-x64-search-validation.zip` 的 SHA-256 核对通过。解压后的程序在新数据目录中通过 REST 导入和节点搜索验收，返回两字中文、带查询 ID 的文件路径和模糊命中。将同一个 v1.1.0 数据目录交给验证包后，旧条目完成重建，标题和路径可按多词检索，哈希与详情一致。新增种子在重启后仍可检索。包内程序也通过了中文路径下载冒烟测试。
+- 本地验证包由含阶段 1–5 改动的工作区构建，源码与验证提交 `0521a81` 一致。包内 `build-info.json` 按打包脚本惯例记录工作区的基线 `3965c28` 和 `sourceModified: true`。ZIP 的 SHA-256 为 `753247abf1ee7ebede3a0d730455b41040e97e4ddd8a0bb8dfbf5cd469e18956`。
+- 验证分支的 `0521a81` 通过 Windows x64（MSVC）、Linux x64 和 macOS ARM 的构建、测试及打包。Windows 的 `crawler_live_probe` 编译通过。该次运行跳过了 macOS Intel 和正式发布作业，v1.1.0 标签仍指向 `3965c28`。 [GitHub Actions](https://github.com/MikiyaKkt/rats-search-DEV/actions/runs/45006154786)
+- 10,022 条合成种子的引擎基线中，两张索引合计增大约 11.3%，标题 p95 从 101.74 ms 变为 104.04 ms，文件 p95 从 2.71 ms 变为 3.25 ms。隔离样本的模糊标题、文件 p95 分别为 3.38 ms 和 5.47 ms。507 条标题和 506 条文件记录的迁移续跑约 1.34 秒，含注入中断和一次引擎重启。三组样本的负载和统计范围各异，生产规模迁移耗时仍未测量。 [引擎基线](SEARCH_PHASE1_REPORT.md) · [集成测试](../tests/test_manticore_queries.cpp)
+
 ## 里程碑与验证命令
 
 | 里程碑 | 阶段 | 可验收交付 |
@@ -109,7 +118,7 @@ Windows Release 构建及 32 项 CTest 全部通过，两个 REST 端点通过�
 在配置好 Qt 和编译器运行时的 Windows 环境中，优先运行聚焦测试，再跑全量构建和打包。现有构建目录为 `build-windows-x64`。验证包使用独立后缀。正式打包前先确认目标版本号和发布提交。
 
 ```powershell
-ctest --test-dir build-windows-x64 -R '^(test_query|test_manticore_queries)$' --output-on-failure
+ctest --test-dir build-windows-x64 -R '^(test_query|test_search_results|test_manticore_queries|test_peer_search)$' --output-on-failure
 .\build-windows.cmd -Offline -PackageSuffix search-validation
 ```
 
