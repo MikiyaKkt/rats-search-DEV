@@ -46,6 +46,7 @@ public:
     void stop();
     bool isRunning() const;
 
+    void setProtocol(QString protocol);
     void setPortMappingEnabled(bool enabled);
     void setHolePunchEnabled(bool enabled);
     // Reach peers through a third node when no punch can land, and (separately)
@@ -134,6 +135,7 @@ private:
     // Preferences only; both subsystems are attached before start(), so a change
     // takes effect on the next (re)start.
     bool portMappingEnabled_ = true;
+    QString protocol_ = QStringLiteral("rats-search/4");
     bool holePunchEnabled_ = true;
     bool relayEnabled_ = true;
     bool relayServeEnabled_ = false;

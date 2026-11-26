@@ -68,6 +68,8 @@ public:
         // across later config changes — a daemon started with --share-db=off
         // must not start serving because something wrote the config key.
         std::optional<bool> shareDatabase;
+        // A private protocol namespace for isolated application instances.
+        QString p2pProtocolOverride;
     };
 
     explicit Application(Options options, QObject* parent = nullptr);

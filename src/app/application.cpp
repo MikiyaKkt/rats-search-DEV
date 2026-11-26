@@ -124,6 +124,8 @@ Application::Application(Options options, QObject* parent) : QObject(parent), d_
     const int dhtPort = d_->options.dhtPort > 0 ? d_->options.dhtPort : cfg->dhtPort();
     const int maxPeers = d_->options.maxPeers > 0 ? d_->options.maxPeers : cfg->p2pConnections();
     d_->transport = std::make_unique<net::P2PTransport>(p2pPort, dhtPort, dataDir, maxPeers);
+    if (!d_->options.p2pProtocolOverride.isEmpty())
+        d_->transport->setProtocol(d_->options.p2pProtocolOverride);
     d_->engine = std::make_unique<net::TorrentEngine>(d_->transport.get());
     d_->crawler = std::make_unique<net::Crawler>(d_->transport.get());
     d_->metrics = std::make_unique<common::PerformanceReporter>();

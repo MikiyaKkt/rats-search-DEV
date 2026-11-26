@@ -288,6 +288,11 @@ P2PTransport::~P2PTransport()
     stop();
 }
 
+void P2PTransport::setProtocol(QString protocol)
+{
+    protocol_ = std::move(protocol);
+}
+
 bool P2PTransport::start()
 {
     if (d_->running) {
@@ -306,7 +311,7 @@ bool P2PTransport::start()
         // same string can complete a handshake or find each other. Bump it when a
         // wire change makes older peers actively misbehave (not merely miss a
         // feature) — patch releases must keep it identical.
-        config.protocol = "rats-search/4";
+        config.protocol = protocol_.toStdString();
         config.data_dir = d_->dataDirectory.toStdString();
         config.security = librats::NodeConfig::Security::Noise;
 

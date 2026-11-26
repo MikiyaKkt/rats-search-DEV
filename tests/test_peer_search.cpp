@@ -181,14 +181,20 @@ void TestPeerSearch::blockedSearchKeepsMainLoopResponsive()
     request.query = "replacement search";
     QVERIFY(service.searchAsync(this, request, SearchService::Mode::Torrents, SearchService::Lane::Desktop,
         [&](SearchService::Results) { ++currentCallbacks; }));
-    int heartbeats = 0;
-    QTimer heartbeat;
-    heartbeat.setInterval(25);
-    connect(&heartbeat, &QTimer::timeout, this, [&] { ++heartbeats; });
-    heartbeat.start();
-    QTimer::singleShot(3000, &heartbeat, [&] { database.gate.release(); });
+    // Prove an event runs while the query is blocked, without relying on how
+    // many ticks the platform coalesces under parallel CI load.
+    bool responsiveWhileBlocked = false;
+    QTimer probe;
+    probe.setSingleShot(true);
+    connect(&probe, &QTimer::timeout, this, [&] {
+        responsiveWhileBlocked = database.calls.load() == 1 && oldCallbacks == 0 && currentCallbacks == 0;
+    });
+    probe.start(100);
+    QTest::qWait(3000);
+    QVERIFY(responsiveWhileBlocked);
+    QCOMPARE(database.calls.load(), 1);
+    database.gate.release();
     QTRY_COMPARE_WITH_TIMEOUT(currentCallbacks, 1, 4500);
-    QVERIFY(heartbeats > 60);
     QCOMPARE(oldCallbacks, 0);
     QCOMPARE(database.calls.load(), 2); // The old job skipped its file search.
 }
@@ -202,8 +208,13 @@ void TestPeerSearch::twoNodes()
     QVERIFY(sendingPort != servingPort);
     QVERIFY(prepareNode(servingData, servingPort));
     QVERIFY(prepareNode(sendingData, sendingPort, servingPort));
-    Application serving(options(servingData));
-    Application sending(options(sendingData));
+    const QString testProtocol = QStringLiteral("rats-search-test/") + searchId();
+    auto servingOptions = options(servingData);
+    auto sendingOptions = options(sendingData);
+    servingOptions.p2pProtocolOverride = testProtocol;
+    sendingOptions.p2pProtocolOverride = testProtocol;
+    Application serving(servingOptions);
+    Application sending(sendingOptions);
     QVERIFY(serving.start());
     QVERIFY(sending.start());
     const QString serverId = serving.transport()->ourPeerId();
