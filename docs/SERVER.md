@@ -106,4 +106,4 @@ Headless clients must fetch task metadata and submit a complete `download.files.
 
 See [advanced API contracts](API.md#s3-advanced-download-policies) for version-2 policy/session migration, weekly schedules, bounded request windows, cache budgets, piece aggregation and seeding goal ledgers. Use expected revisions when updating schedules or seeding conditions; accepted file operations remain asynchronous. Schedule pause preserves manual pause intent and does not imply a process-wide network blackout. Seeding goals never remove content. Keep a backup of configuration, sessions, resume and `.parts` together.
 
-For isolated verification, `--no-remember-data-dir` prevents an explicit `--data-dir` from replacing the user's remembered location. Use an ASCII database data path with the bundled Windows Manticore; downloaded content can use Unicode paths.
+For isolated verification, `--no-remember-data-dir` prevents an explicit `--data-dir` from replacing the user's remembered location. When managing bundled Manticore manually for a Unicode Windows profile, run its commands from the profile directory and pass `--config sphinx.conf`.

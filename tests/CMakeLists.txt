@@ -59,6 +59,9 @@ endfunction()
 # Unit tests (pure, no external process required)
 add_rats_test(test_domain)
 add_rats_test(test_query)
+add_rats_test(test_search_results ${CMAKE_SOURCE_DIR}/src/ui/searchresultmodel.cpp)
+add_rats_test(test_favorites_store)
+add_rats_test(test_data_relocation)
 add_rats_test(test_infohash)
 add_rats_test(test_utf8_download_paths)
 add_rats_test(test_download_metrics)
@@ -135,6 +138,8 @@ add_rats_test(test_content_classifier ${CMAKE_SOURCE_DIR}/resources/resources.qr
 # data layer (Manticore + Database + TorrentRepository).
 add_rats_test(test_manticore_queries)
 set_tests_properties(test_manticore_queries PROPERTIES RESOURCE_LOCK manticore_local)
+add_rats_test(test_peer_search ${CMAKE_SOURCE_DIR}/src/ui/searchresultmodel.cpp)
+set_tests_properties(test_peer_search PROPERTIES RESOURCE_LOCK manticore_local TIMEOUT 90)
 
 # Copy libmysql.dll next to test executables so the QMYSQL driver can load.
 #
@@ -175,12 +180,17 @@ if(WIN32)
 
     if(LIBMYSQL_PATH)
         message(STATUS "Integration tests: libmysql.dll from ${LIBMYSQL_PATH}")
-        add_custom_command(TARGET test_manticore_queries POST_BUILD
+        set(INTEGRATION_TEST_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+        if(CMAKE_CONFIGURATION_TYPES)
+            string(APPEND INTEGRATION_TEST_BIN_DIR "/$<CONFIG>")
+        endif()
+        add_custom_target(integration_test_mysql
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${INTEGRATION_TEST_BIN_DIR}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${LIBMYSQL_PATH}"
-                "$<TARGET_FILE_DIR:test_manticore_queries>"
-            COMMENT "Copying libmysql.dll for integration tests..."
-        )
+                "${LIBMYSQL_PATH}" "${INTEGRATION_TEST_BIN_DIR}"
+            COMMENT "Copying libmysql.dll for integration tests...")
+        add_dependencies(test_manticore_queries integration_test_mysql)
+        add_dependencies(test_peer_search integration_test_mysql)
     else()
         message(STATUS "Integration tests: no libmysql.dll next to Qt. Copy the one that ships with the "
                        "QMYSQL driver next to the test binary by hand -- NOT the one in imports/, which "
@@ -191,8 +201,8 @@ endif()
 # Custom target to run all tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_domain test_query test_infohash test_utf8_download_paths test_download_metrics test_performance_metrics test_crawler_metrics test_download_policy test_download_s1 test_download_s3 test_download_ui test_download_creation test_download_errors test_update_service
-            test_config_store test_filter_policy test_content_classifier test_manticore_queries
+    DEPENDS test_domain test_query test_search_results test_favorites_store test_data_relocation test_infohash test_utf8_download_paths test_download_metrics test_performance_metrics test_crawler_metrics test_download_policy test_download_s1 test_download_s3 test_download_ui test_download_creation test_download_errors test_update_service
+            test_config_store test_filter_policy test_content_classifier test_manticore_queries test_peer_search
             test_manticore_maintenance
             test_database_dump
             test_voting_record

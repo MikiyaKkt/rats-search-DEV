@@ -289,20 +289,26 @@ bool Application::start()
     }
     d_->torrents->primeFromDatabase();
 
-    // Blocking pre-start migrations run before anything reads the data. These are
-    // housekeeping migrations, so a failure is non-fatal — but it must not pass
-    // silently (the service logs the specific migration; we log the outcome).
+    // Run blocking migrations before the crawler and API can write to either
+    // table. Search reindexing must finish before the application serves a query.
     // They run on this thread, before any window exists: a front-end that wants
     // to show them (MigrationProgressWindow in GUI mode, a stdout bar in console
     // mode) connects to MigrationService::syncMigrationStarted before start() is
     // called and pumps the event queue itself. The async migrations below run
     // while the window is up and are surfaced in its status bar.
     if (!d_->migrations->runSyncMigrations()) {
+        if (!d_->migrations->searchIndexReady()) {
+            qCritical() << "[Application] search reindex incomplete; startup will resume it next time";
+            d_->manticore->stop();
+            return false;
+        }
         qWarning() << "[Application] one or more synchronous migrations failed; "
                       "continuing startup";
     }
 
     d_->feed->load();
+    d_->search->startAsync();
+    d_->peerApi->startBackground();
     applyConfig(); // restore service toggles after a prior stop() in this process
     d_->transport->start();
 
@@ -334,6 +340,8 @@ void Application::stop()
     qInfo() << "[Application] stopping";
 
     d_->apiServer->stop();
+    d_->search->stopAsync();
+    d_->peerApi->stopBackground();
     // Stop the crawler (the source of new torrents) and the tracker scrapers early
     // so no fresh tracker requests are issued during shutdown, and in-flight
     // announces / HTTP requests are drained rather than left blocking teardown.

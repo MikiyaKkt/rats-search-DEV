@@ -137,6 +137,9 @@ void TorrentTableWidget::handleContextMenu(const QPoint& pos)
     QModelIndex index = tableView_->indexAt(pos);
     if (!index.isValid())
         return;
+    auto* selection = tableView_->selectionModel();
+    if (tableView_->selectionMode() == QAbstractItemView::ExtendedSelection && !selection->isSelected(index))
+        selection->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
     rats::domain::Torrent torrent = model_->getTorrent(index.row());
     if (!torrent.isValid())

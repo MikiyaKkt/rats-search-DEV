@@ -269,7 +269,78 @@ Start downloading torrents from the search results!</source>
     </message>
 </context>
 <context>
+    <name>DataRelocation</name>
+    <message><source>Data migration</source><translation>数据迁移</translation></message>
+    <message><source>Copying database and profile…</source><translation>正在复制数据库和用户数据…</translation></message>
+    <message><source>Cancel</source><translation>取消</translation></message>
+    <message><source>The source database is still in use.</source><translation>原数据库仍在使用中。</translation></message>
+    <message><source>The destination is in use or cannot be locked.</source><translation>目标目录正在使用中，或无法锁定。</translation></message>
+    <message><source>The copied database could not be opened. The original location is still selected.</source><translation>无法打开复制后的数据库，仍使用原位置。</translation></message>
+    <message><source>Could not save the new data directory.</source><translation>无法保存新的数据目录。</translation></message>
+    <message><source>Choose an absolute destination path.</source><translation>请选择绝对目标路径。</translation></message>
+    <message><source>Choose a destination outside the current data directory.</source><translation>请选择当前数据目录之外的位置。</translation></message>
+    <message><source>Choose an empty folder or a new folder inside an existing directory.</source><translation>请选择空文件夹，或在已有目录内指定新文件夹。</translation></message>
+    <message><source>The destination folder already contains files.</source><translation>目标文件夹已包含文件。</translation></message>
+    <message><source>Could not save the migration request.</source><translation>无法保存迁移请求。</translation></message>
+    <message><source>Could not clear the migration request.</source><translation>无法清除迁移请求。</translation></message>
+    <message><source>Cannot copy profile entry: %1</source><translation>无法复制用户数据：%1</translation></message>
+    <message><source>No database or profile files were found.</source><translation>未找到数据库或用户数据文件。</translation></message>
+    <message><source>The destination does not have enough free space.</source><translation>目标位置的可用空间不足。</translation></message>
+    <message><source>Could not create a staging directory at the destination.</source><translation>无法在目标位置创建临时目录。</translation></message>
+    <message><source>Data migration was cancelled.</source><translation>数据迁移已取消。</translation></message>
+    <message><source>Could not finalize the copied data directory.</source><translation>无法完成数据目录复制。</translation></message>
+    <message><source>Could not publish the copied data directory.</source><translation>无法启用复制后的数据目录。</translation></message>
+</context>
+<context>
     <name>FavoritesWidget</name>
+    <message><source>Export format</source><translation>导出格式</translation></message>
+    <message><source>Excel workbook</source><translation>Excel 工作簿</translation></message>
+    <message><source>Excel workbooks (*.xlsx)</source><translation>Excel 工作簿 (*.xlsx)</translation></message>
+    <message><source>Use the .%1 filename extension for this format.</source><translation>此格式的文件扩展名应为 .%1。</translation></message>
+    <message><source>Title</source><translation>标题</translation></message>
+    <message><source>Magnet link</source><translation>磁力链接</translation></message>
+    <message><source>Info hash</source><translation>信息哈希</translation></message>
+    <message><source>Folder</source><translation>收藏文件夹</translation></message>
+    <message><source>Added to Favorites (UTC)</source><translation>收藏时间（UTC）</translation></message>
+    <message><source>File list</source><translation>文件列表</translation></message>
+    <message><source>File path</source><translation>文件路径</translation></message>
+    <message><source>Bytes</source><translation>字节数</translation></message>
+    <message><source>Unavailable</source><translation>不可用</translation></message>
+    <message><source>Could not write the Excel worksheet.</source><translation>无法写入 Excel 工作表。</translation></message>
+    <message><source>Could not write an Excel row. The workbook may exceed Excel's row or cell limits.</source><translation>无法写入 Excel 行，工作簿可能超出 Excel 的行数或单元格限制。</translation></message>
+    <message><source>Could not write the Excel workbook.</source><translation>无法写入 Excel 工作簿。</translation></message>
+    <message><source>Export cancelled.</source><translation>导出已取消。</translation></message>
+    <message><source>Unfiled</source><translation>未分类</translation></message>
+    <message><source>Destination folder</source><translation>目标文件夹</translation></message>
+    <message><source>Favorites folder</source><translation>收藏文件夹</translation></message>
+    <message><source>Manage folders</source><translation>管理文件夹</translation></message>
+    <message><source>New folder…</source><translation>新建文件夹…</translation></message>
+    <message><source>Rename folder…</source><translation>重命名文件夹…</translation></message>
+    <message><source>Delete folder…</source><translation>删除文件夹…</translation></message>
+    <message><source>Move selected…</source><translation>移动选中项…</translation></message>
+    <message><source>Remove selected</source><translation>移除选中项</translation></message>
+    <message><source>Export favorites</source><translation>导出收藏</translation></message>
+    <message><source>Export selected…</source><translation>导出选中项…</translation></message>
+    <message><source>Export current folder…</source><translation>导出当前文件夹…</translation></message>
+    <message><source>Export all favorites…</source><translation>导出全部收藏…</translation></message>
+    <message><source>All favorites</source><translation>全部收藏</translation></message>
+    <message><source>No favorites yet.</source><translation>还没有收藏。</translation></message>
+    <message><source>This folder has no favorites.</source><translation>此文件夹还没有收藏。</translation></message>
+    <message><source>Remove favorites</source><translation>移除收藏</translation></message>
+    <message numerus="yes"><source>Remove %n selected torrent(s) from Favorites?</source><translation><numerusform>确定从收藏中移除选中的 %n 个种子？</numerusform></translation></message>
+    <message><source>Move favorites</source><translation>移动收藏</translation></message>
+    <message><source>Rename folder</source><translation>重命名文件夹</translation></message>
+    <message><source>New folder</source><translation>新建文件夹</translation></message>
+    <message><source>Folder name</source><translation>文件夹名称</translation></message>
+    <message><source>Enter a non-empty, unique folder name.</source><translation>请输入非空且不重复的文件夹名称。</translation></message>
+    <message><source>Delete folder</source><translation>删除文件夹</translation></message>
+    <message><source>Delete the folder “%1” and move its favorites to Unfiled?</source><translation>确定删除文件夹「%1」，并将其中的收藏移至「未分类」？</translation></message>
+    <message><source>Include file lists when available</source><translation>包含可用的文件列表</translation></message>
+    <message><source>Include date added to Favorites</source><translation>包含加入收藏的时间</translation></message>
+    <message><source>JSON files (*.json)</source><translation>JSON 文件 (*.json)</translation></message>
+    <message><source>Choose a different file from the live favorites file.</source><translation>请选择收藏数据文件以外的路径。</translation></message>
+    <message><source>Favorites exported to %1</source><translation>收藏已导出至 %1</translation></message>
+    <message><source>Search is busy. Try again.</source><translation>后台任务繁忙，请重试。</translation></message>
     <message>
         <location filename="../src/ui/favoriteswidget.cpp" line="25"/>
         <source>⭐ My Favorites</source>
@@ -332,12 +403,27 @@ or they will be added automatically when you create or import a torrent.</source
 </context>
 <context>
     <name>MainWindow</name>
+    <message><source>Hide favorited torrents</source><translation>隐藏已收藏种子</translation></message>
+    <message><source>Add selected to Favorites</source><translation>将选中项加入收藏</translation></message>
+    <message><source>Add to Favorites</source><translation>加入收藏</translation></message>
+    <message><source>The selected torrents are already in Favorites.</source><translation>选中的种子已在收藏中。</translation></message>
+    <message numerus="yes"><source>Added %n torrent(s) to Favorites</source><translation><numerusform>已将 %n 个种子加入收藏</numerusform></translation></message>
+    <message><source>Could not save favorites: %1</source><translation>无法保存收藏：%1</translation></message>
+    <message><source>Search is busy. Try again.</source><translation>搜索繁忙，请重试。</translation></message>
+    <message>
+        <source>Fuzzy</source>
+        <translation>模糊查找</translation>
+    </message>
+    <message>
+        <source>Include results with one typo in a search word</source>
+        <translation>补充一个搜索词有一处错字的结果</translation>
+    </message>
     <message><source>Metadata requests: %1 active; configured limit: %2%3</source><translation>元数据请求：进行中 %1 个；配置上限 %2%3</translation></message>
     <message><source>; waiting for capacity</source><translation>；正在等待可用容量</translation></message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="118"/>
-        <source>Rats Search %1 - BitTorrent P2P Search Engine</source>
-        <translation>Rats Search %1 - BitTorrent P2P 搜索引擎</translation>
+        <source>Rats Search Adv %1 - BitTorrent P2P Search Engine</source>
+        <translation>Rats Search Adv %1 - BitTorrent P2P 搜索引擎</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="203"/>
@@ -731,8 +817,8 @@ or they will be added automatically when you create or import a torrent.</source
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
         <location filename="../src/ui/mainwindow.cpp" line="2049"/>
-        <source>Rats Search</source>
-        <translation>Rats Search</translation>
+        <source>Rats Search Adv</source>
+        <translation>Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
@@ -746,8 +832,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="939"/>
-        <source>Are you sure you want to exit Rats Search?</source>
-        <translation>确定要退出 Rats Search 吗？</translation>
+        <source>Are you sure you want to exit Rats Search Adv?</source>
+        <translation>确定要退出 Rats Search Adv 吗？</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1000"/>
@@ -952,8 +1038,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1472"/>
-        <source>About Rats Search</source>
-        <translation>关于 Rats Search</translation>
+        <source>About Rats Search Adv</source>
+        <translation>关于 Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1490"/>
@@ -998,8 +1084,8 @@ with DHT crawling and full-text search.</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1570"/>
-        <source>Recent changes and updates to Rats Search</source>
-        <translation>Rats Search 的最近更改与更新</translation>
+        <source>Recent changes and updates to Rats Search Adv</source>
+        <translation>Rats Search Adv 的最近更改与更新</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1599"/>
@@ -1108,8 +1194,8 @@ No changelog available.</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1718"/>
-        <source>Created with Rats Search</source>
-        <translation>由 Rats Search 创建</translation>
+        <source>Created with Rats Search Adv</source>
+        <translation>由 Rats Search Adv 创建</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1721"/>
@@ -1282,8 +1368,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1962"/>
-        <source>Rats Search - P2P Torrent Search Engine</source>
-        <translation>Rats Search - P2P 种子搜索引擎</translation>
+        <source>Rats Search Adv - P2P Torrent Search Engine</source>
+        <translation>Rats Search Adv - P2P 种子搜索引擎</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1967"/>
@@ -1317,8 +1403,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2102"/>
-        <source>You are running the latest version of Rats Search (%1).</source>
-        <translation>你正在使用最新版本的 Rats Search (%1)。</translation>
+        <source>You are running the latest version of Rats Search Adv (%1).</source>
+        <translation>你正在使用最新版本的 Rats Search Adv (%1)。</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2118"/>
@@ -1332,11 +1418,11 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2130"/>
-        <source>A new version of Rats Search is available.
+        <source>A new version of Rats Search Adv is available.
 
 Current version: %1
 New version: %2</source>
-        <translation>Rats Search 有新版本可用。
+        <translation>Rats Search Adv 有新版本可用。
 
 当前版本：%1
 新版本：%2</translation>
@@ -1431,8 +1517,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2350"/>
-        <source>Rats Search - License Agreement</source>
-        <translation>Rats Search - 许可协议</translation>
+        <source>Rats Search Adv - License Agreement</source>
+        <translation>Rats Search Adv - 许可协议</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2356"/>
@@ -1491,6 +1577,14 @@ Do you want to install the update now?</source>
 <context>
     <name>SearchResultModel</name>
     <message>
+        <source>[Fuzzy] %1</source>
+        <translation>[模糊] %1</translation>
+    </message>
+    <message>
+        <source>Fuzzy match</source>
+        <translation>模糊命中</translation>
+    </message>
+    <message>
         <location filename="../src/ui/searchresultmodel.cpp" line="94"/>
         <source>Name</source>
         <translation>名称</translation>
@@ -1518,6 +1612,9 @@ Do you want to install the update now?</source>
 </context>
 <context>
     <name>SettingsDialog</name>
+    <message><source>Migrate current data on restart</source><translation>重启时迁移当前数据</translation></message>
+    <message><source>Migration requires an empty destination and keeps the original files as a backup.</source><translation>迁移需要空目标文件夹，原文件会保留为备份。</translation></message>
+    <message><source>Could not save the new data directory.</source><translation>无法保存新的数据目录。</translation></message>
     <message><source>Metadata concurrency limit:</source><translation>元数据并发上限：</translation></message>
     <message><source>Maximum concurrent crawler metadata requests. Capacity limits may keep the actual count lower. Changes apply after Save without restarting.</source><translation>爬虫同时获取元数据的请求上限。容量限制可能使实际请求数更低。保存后生效，无需重启。</translation></message>
     <message><source>Current activity:</source><translation>当前活动：</translation></message>
@@ -1534,8 +1631,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="45"/>
-        <source>Rats Search Settings</source>
-        <translation>Rats Search 设置</translation>
+        <source>Rats Search Adv Settings</source>
+        <translation>Rats Search Adv 设置</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="51"/>
@@ -1589,8 +1686,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="158"/>
-        <source>Automatically start Rats Search when you log in to your computer</source>
-        <translation>登录计算机时自动启动 Rats Search</translation>
+        <source>Automatically start Rats Search Adv when you log in to your computer</source>
+        <translation>登录计算机时自动启动 Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="161"/>
@@ -2535,5 +2632,27 @@ Do you want to install the update now?</source>
 <message><source>Task download settings</source><translation>任务下载设置</translation></message>
 <message><source>Task settings</source><translation>任务设置</translation></message>
 <message><source>Upload limit</source><translation>上传限速</translation></message>
+</context>
+<context>
+    <name>rats::service::SearchService</name>
+    <message>
+        <source>Close the quotation marks to search for a phrase.</source>
+        <translation>请补齐引号后再搜索短语。</translation>
+    </message>
+    <message>
+        <source>Enter text between the quotation marks.</source>
+        <translation>请在引号内输入要搜索的文字。</translation>
+    </message>
+    <message>
+        <source>Query too short</source>
+        <translation>搜索词太短</translation>
+    </message>
+</context>
+<context>
+    <name>rats::service::MigrationService</name>
+    <message>
+        <source>Rebuilding the search index</source>
+        <translation>正在重建搜索索引</translation>
+    </message>
 </context>
 </TS>

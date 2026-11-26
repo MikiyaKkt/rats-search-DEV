@@ -28,6 +28,7 @@ class QCompleter;
 class QStringListModel;
 class QTableView;
 class SearchResultModel;
+class SearchResultsFilter;
 class TorrentItemDelegate;
 class TorrentDetailsPanel;
 class QMenu;
@@ -192,6 +193,8 @@ private:
     // MigrationService::migrationProgress.
     void onMigrationProgress(const QString& migrationId, qint64 current, qint64 total);
     void addToFavorites(const rats::domain::Torrent& torrent);
+    void addSelectedSearchFavorites();
+    QVector<rats::domain::Torrent> selectedSearchTorrents() const;
 
     // P2P Connection state for status indicator
     enum class P2PState {
@@ -212,6 +215,9 @@ private:
     QComboBox* sortComboBox = nullptr;
     QComboBox* typeComboBox = nullptr;
     QCheckBox* safeSearchCheckBox = nullptr;
+    QCheckBox* fuzzySearchCheckBox = nullptr;
+    QCheckBox* hideFavoritesCheckBox = nullptr;
+    QPushButton* addSelectedFavoritesButton = nullptr;
     // Search-bar "Filters" drop-down: size and file-count ranges.
     QToolButton* filtersButton = nullptr;
     QMenu* filtersMenu = nullptr;
@@ -257,10 +263,14 @@ private:
 
     // Models and Delegates
     SearchResultModel* searchResultModel = nullptr;
+    SearchResultsFilter* searchResultsFilter_ = nullptr;
+    QTimer* remoteResultsTimer_ = nullptr;
+    QVector<rats::domain::SearchHit> pendingRemoteResults_;
     TorrentItemDelegate* torrentDelegate = nullptr;
 
     // State
     QString currentSearchQuery_;
+    QString currentSearchId_;
     quint64 filesRequestId_ = 0;
     qint64 cachedTorrentCount_ = 0; // Local torrent count (from statistics)
     qint64 cachedRemoteTorrentCount_ = 0; // Sum of torrents advertised by peers

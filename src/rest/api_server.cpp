@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMap>
+#include <QPointer>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUrl>
@@ -340,8 +341,8 @@ void ApiServer::dispatchHttp(QTcpSocket* socket, const QString& method, const QJ
         return;
     }
 
-    router_->call(method, params, [socket, requestId](const Result& result) {
-        if (!socket->isOpen()) {
+    router_->call(method, params, [socket = QPointer<QTcpSocket>(socket), requestId](const Result& result) {
+        if (!socket || !socket->isOpen()) {
             return;
         }
         const QJsonObject env = resultToEnvelope(result, requestId);
@@ -379,8 +380,8 @@ void ApiServer::onWsMessage(QWebSocket* socket, const QString& message)
         return;
     }
 
-    router_->call(method, params, [socket, requestId](const Result& result) {
-        if (!socket->isValid()) {
+    router_->call(method, params, [socket = QPointer<QWebSocket>(socket), requestId](const Result& result) {
+        if (!socket || !socket->isValid()) {
             return;
         }
         const QJsonObject env = resultToEnvelope(result, requestId);

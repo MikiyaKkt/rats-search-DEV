@@ -334,8 +334,8 @@ or they will be added automatically when you create or import a torrent.</source
     <name>MainWindow</name>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="118"/>
-        <source>Rats Search %1 - BitTorrent P2P Search Engine</source>
-        <translation>Rats Search %1 — поисковая система BitTorrent P2P</translation>
+        <source>Rats Search Adv %1 - BitTorrent P2P Search Engine</source>
+        <translation>Rats Search Adv %1 — поисковая система BitTorrent P2P</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="203"/>
@@ -731,8 +731,8 @@ or they will be added automatically when you create or import a torrent.</source
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
         <location filename="../src/ui/mainwindow.cpp" line="2049"/>
-        <source>Rats Search</source>
-        <translation>Rats Search</translation>
+        <source>Rats Search Adv</source>
+        <translation>Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
@@ -746,8 +746,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="939"/>
-        <source>Are you sure you want to exit Rats Search?</source>
-        <translation>Вы уверены, что хотите выйти из Rats Search?</translation>
+        <source>Are you sure you want to exit Rats Search Adv?</source>
+        <translation>Вы уверены, что хотите выйти из Rats Search Adv?</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1000"/>
@@ -952,8 +952,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1472"/>
-        <source>About Rats Search</source>
-        <translation>О программе Rats Search</translation>
+        <source>About Rats Search Adv</source>
+        <translation>О программе Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1490"/>
@@ -998,8 +998,8 @@ with DHT crawling and full-text search.</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1570"/>
-        <source>Recent changes and updates to Rats Search</source>
-        <translation>Последние изменения и обновления Rats Search</translation>
+        <source>Recent changes and updates to Rats Search Adv</source>
+        <translation>Последние изменения и обновления Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1599"/>
@@ -1108,8 +1108,8 @@ No changelog available.</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1718"/>
-        <source>Created with Rats Search</source>
-        <translation>Создано в Rats Search</translation>
+        <source>Created with Rats Search Adv</source>
+        <translation>Создано в Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1721"/>
@@ -1282,8 +1282,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1962"/>
-        <source>Rats Search - P2P Torrent Search Engine</source>
-        <translation>Rats Search — P2P-поисковая система торрентов</translation>
+        <source>Rats Search Adv - P2P Torrent Search Engine</source>
+        <translation>Rats Search Adv — P2P-поисковая система торрентов</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1967"/>
@@ -1317,8 +1317,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2102"/>
-        <source>You are running the latest version of Rats Search (%1).</source>
-        <translation>У вас установлена последняя версия Rats Search (%1).</translation>
+        <source>You are running the latest version of Rats Search Adv (%1).</source>
+        <translation>У вас установлена последняя версия Rats Search Adv (%1).</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2118"/>
@@ -1332,11 +1332,11 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2130"/>
-        <source>A new version of Rats Search is available.
+        <source>A new version of Rats Search Adv is available.
 
 Current version: %1
 New version: %2</source>
-        <translation>Доступна новая версия Rats Search.
+        <translation>Доступна новая версия Rats Search Adv.
 
 Текущая версия: %1
 Новая версия: %2</translation>
@@ -1431,8 +1431,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2350"/>
-        <source>Rats Search - License Agreement</source>
-        <translation>Rats Search — лицензионное соглашение</translation>
+        <source>Rats Search Adv - License Agreement</source>
+        <translation>Rats Search Adv — лицензионное соглашение</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2356"/>
@@ -1525,8 +1525,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="45"/>
-        <source>Rats Search Settings</source>
-        <translation>Настройки Rats Search</translation>
+        <source>Rats Search Adv Settings</source>
+        <translation>Настройки Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="51"/>
@@ -1580,8 +1580,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="158"/>
-        <source>Automatically start Rats Search when you log in to your computer</source>
-        <translation>Автоматически запускать Rats Search при входе в систему</translation>
+        <source>Automatically start Rats Search Adv when you log in to your computer</source>
+        <translation>Автоматически запускать Rats Search Adv при входе в систему</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="161"/>

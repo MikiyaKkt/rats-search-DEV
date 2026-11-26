@@ -5,7 +5,9 @@
 #include "domain/torrent.h"
 
 #include <QObject>
+#include <QThreadPool>
 #include <QVector>
+#include <functional>
 #include <optional>
 
 namespace rats::service {
@@ -27,6 +29,7 @@ public:
         QString sort;
         bool descending = true;
         bool safeSearch = false;
+        bool fuzzy = false;
         QString contentType;
         qint64 sizeMin = 0;
         qint64 sizeMax = 0;
@@ -35,25 +38,59 @@ public:
     };
 
     explicit SearchService(data::TorrentRepository* repository, QObject* parent = nullptr);
+    ~SearchService() override;
 
-    QVector<domain::SearchHit> searchTorrents(const Request& request);
-    QVector<domain::SearchHit> searchFiles(const Request& request);
+    enum class Mode { Torrents, Files, Both };
+    enum class Lane { Desktop, Api, Peer };
+    struct Results {
+        QVector<domain::SearchHit> torrents;
+        QVector<domain::SearchHit> files;
+    };
+    bool searchAsync(QObject* receiver, Request request, Mode mode, Lane lane,
+        std::function<void(Results)> completed);
+    bool getAsync(QObject* receiver, QString hash, bool includeFiles, Lane lane,
+        std::function<void(std::optional<domain::Torrent>)> completed);
+    // Runs an index read or export using the API worker pool. The work returns
+    // an error message, or an empty string on success.
+    using ExportWork = std::function<QString(data::TorrentRepository&, const std::function<bool()>& cancelled)>;
+    bool exportAsync(QObject* receiver, ExportWork work,
+        std::function<void(QString)> completed);
+    void startAsync();
+    void stopAsync();
+
+    QVector<domain::SearchHit> searchTorrents(const Request& request,
+        const data::TorrentRepository::SearchCancellation& cancellation = {});
+    QVector<domain::SearchHit> searchFiles(const Request& request,
+        const data::TorrentRepository::SearchCancellation& cancellation = {});
 
     QVector<domain::Torrent> recent(int limit = 10);
     QVector<domain::Torrent> top(const QString& type, const QString& time, int offset, int limit);
     std::optional<domain::Torrent> get(const QString& hash, bool includeFiles = true);
 
+    // Shared validation for the desktop and REST. The REST file endpoint
+    // retains its historical minimum length for non-CJK/Thai queries.
+    static QString queryError(const QString& query, bool requireLongQuery = false);
+    static bool canSendLegacyQuery(const QString& query);
+
     // Extracts a normalized (lower-case) 40-hex info-hash from a search query,
     // accepting both a bare hash and a full "magnet:?xt=urn:btih:..." link.
-    // Returns an empty string if the query carries no info-hash. This is the
-    // single place the search path recognizes "this query is a torrent hash", so
-    // a magnet link resolves via the DHT fallback exactly like a bare hash.
+    // Hashes embedded in ordinary text or quotes are full-text search terms.
     static QString extractInfoHash(const QString& query);
 
 private:
+    template<typename Work, typename Done>
+    bool submit(QObject* receiver, Lane lane, Work work, Done done);
     static data::TorrentRepository::SearchQuery toRepositoryQuery(const Request& request);
 
     data::TorrentRepository* repository_;
+    QThreadPool desktopPool_;
+    QThreadPool apiPool_;
+    QThreadPool peerPool_;
+    qsizetype pendingApi_ = 0;
+    qsizetype pendingPeer_ = 0;
+    quint64 generation_ = 0;
+    data::TorrentRepository::SearchCancellation desktopCancellation_;
+    data::TorrentRepository::SearchCancellation sharedCancellation_;
 };
 
 } // namespace rats::service

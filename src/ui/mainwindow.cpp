@@ -92,11 +92,13 @@
 #include <QTableView>
 #include <QTextEdit>
 #include <QTimer>
+#include <QUuid>
 #include <QToolButton>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QVBoxLayout>
 #include <QWidgetAction>
+#include <utility>
 
 using rats::Result;
 using rats::domain::SearchHit;
@@ -120,7 +122,7 @@ MainWindow::MainWindow(rats::app::Application* app, QWidget* parent)
         }
     }
 
-    setWindowTitle(tr("Rats Search %1 - BitTorrent P2P Search Engine").arg(RATSSEARCH_VERSION_STRING));
+    setWindowTitle(tr("Rats Search Adv %1 - BitTorrent P2P Search Engine").arg(RATSSEARCH_VERSION_STRING));
     resize(1400, 900); // default size; loadSettings() replaces it with the saved geometry
     setWindowIcon(QIcon(":/images/icon.png"));
     setAcceptDrops(true); // drag & drop .torrent files
@@ -202,7 +204,7 @@ void MainWindow::setupUi()
     logoLabel->setObjectName("logoLabel");
     searchLayout->addWidget(logoLabel);
 
-    QLabel* titleLabel = new QLabel("Rats Search");
+    QLabel* titleLabel = new QLabel("Rats Search Adv");
     titleLabel->setObjectName("titleLabel");
     searchLayout->addWidget(titleLabel);
 
@@ -241,6 +243,11 @@ void MainWindow::setupUi()
     if (app_ && app_->config())
         safeSearchCheckBox->setChecked(app_->config()->safeSearch());
 
+    fuzzySearchCheckBox = new QCheckBox(tr("Fuzzy"), this);
+    fuzzySearchCheckBox->setObjectName(QStringLiteral("fuzzySearchCheckBox"));
+    fuzzySearchCheckBox->setToolTip(tr("Include results with one typo in a search word"));
+    fuzzySearchCheckBox->setCursor(Qt::PointingHandCursor);
+
     sortComboBox = new QComboBox(this);
     sortComboBox->addItem(tr("Sort: Seeders ↓"), "seeders_desc");
     sortComboBox->addItem(tr("Sort: Seeders ↑"), "seeders_asc");
@@ -260,6 +267,7 @@ void MainWindow::setupUi()
     searchLayout->addWidget(typeComboBox);
     searchLayout->addWidget(filtersButton);
     searchLayout->addWidget(safeSearchCheckBox);
+    searchLayout->addWidget(fuzzySearchCheckBox);
     searchLayout->addWidget(sortComboBox);
     searchLayout->addWidget(searchButton);
 
@@ -283,12 +291,21 @@ void MainWindow::setupUi()
 
     resultsTableView = new QTableView(this);
     searchResultModel = new SearchResultModel(this);
+    searchResultsFilter_ = new SearchResultsFilter(app_->favorites(), this);
+    searchResultsFilter_->setSourceModel(searchResultModel);
+    remoteResultsTimer_ = new QTimer(this);
+    remoteResultsTimer_->setInterval(50);
+    remoteResultsTimer_->setSingleShot(true);
+    connect(remoteResultsTimer_, &QTimer::timeout, this, [this] {
+        auto results = std::exchange(pendingRemoteResults_, {});
+        searchResultModel->addResults(results);
+    });
     torrentDelegate = new TorrentItemDelegate(this);
 
-    resultsTableView->setModel(searchResultModel);
+    resultsTableView->setModel(searchResultsFilter_);
     resultsTableView->setItemDelegate(torrentDelegate);
     resultsTableView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    resultsTableView->setSelectionMode(QAbstractItemView::SingleSelection);
+    resultsTableView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     resultsTableView->setAlternatingRowColors(true);
     resultsTableView->setSortingEnabled(true);
     resultsTableView->horizontalHeader()->setStretchLastSection(true);
@@ -305,6 +322,14 @@ void MainWindow::setupUi()
     resultsTableView->setColumnWidth(3, 80); // Leechers
     resultsTableView->setColumnWidth(4, 120); // Date
 
+    auto* searchActions = new QHBoxLayout;
+    hideFavoritesCheckBox = new QCheckBox(tr("Hide favorited torrents"), searchTab);
+    searchActions->addWidget(hideFavoritesCheckBox);
+    searchActions->addStretch();
+    addSelectedFavoritesButton = new QPushButton(tr("Add selected to Favorites"), searchTab);
+    addSelectedFavoritesButton->setEnabled(false);
+    searchActions->addWidget(addSelectedFavoritesButton);
+    searchTabLayout->addLayout(searchActions);
     searchTabLayout->addWidget(resultsTableView);
     tabWidget->addTab(searchTab, tr("Search Results"));
 
@@ -576,9 +601,26 @@ void MainWindow::connectSearchSignals()
         if (!currentSearchQuery_.isEmpty())
             performSearch(currentSearchQuery_);
     });
+    connect(fuzzySearchCheckBox, &QCheckBox::toggled, this, [this] {
+        if (!currentSearchQuery_.isEmpty())
+            performSearch(currentSearchQuery_);
+    });
 
     connect(resultsTableView->selectionModel(), &QItemSelectionModel::currentRowChanged, this,
         [this](const QModelIndex& current, const QModelIndex&) { onTorrentSelected(current); });
+    connect(resultsTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this] {
+        addSelectedFavoritesButton->setEnabled(resultsTableView->selectionModel()->hasSelection());
+    });
+    connect(searchResultsFilter_, &QAbstractItemModel::modelReset, this, [this] {
+        addSelectedFavoritesButton->setEnabled(false);
+    });
+    connect(hideFavoritesCheckBox, &QCheckBox::toggled, searchResultsFilter_, &SearchResultsFilter::setHideFavorites);
+    searchResultsFilter_->setHideFavorites(hideFavoritesCheckBox->isChecked());
+    connect(addSelectedFavoritesButton, &QPushButton::clicked, this, &MainWindow::addSelectedSearchFavorites);
+    if (app_->favorites())
+        connect(app_->favorites(), &rats::app::FavoritesStore::saveFailed, this, [this](const QString& error) {
+            showStatusMessage(tr("Could not save favorites: %1").arg(error), 6000);
+        });
     connect(resultsTableView, &QTableView::doubleClicked, this, &MainWindow::onTorrentDoubleClicked);
     connect(resultsTableView, &QTableView::customContextMenuRequested, this, &MainWindow::showTorrentContextMenu);
 }
@@ -618,7 +660,16 @@ void MainWindow::connectTabSignals()
     // Favorites
     connect(favoritesWidget, &FavoritesWidget::torrentSelected, this, [this](const Torrent& t) {
         tabSelection_[favoritesWidget] = t;
-        showTorrentDetails(t);
+        if (tabWidget->currentWidget() != favoritesWidget)
+            return;
+        if (t.isValid())
+            showTorrentDetails(t);
+        else {
+            ++filesRequestId_;
+            detailsPanel->hide();
+            filesWidget->clear();
+            filesWidget->hide();
+        }
     });
     connect(favoritesWidget, &FavoritesWidget::torrentDoubleClicked, this, &MainWindow::openMagnetLink);
     connect(favoritesWidget, &FavoritesWidget::exportTorrentRequested, this, &MainWindow::exportTorrentToFile);
@@ -820,31 +871,19 @@ void MainWindow::connectPeerSignals()
         return;
     auto* peerApi = app_->peerApi();
 
-    // Remote torrent search hits stream into the search-results model.
-    connect(peerApi, &rats::peer::PeerApi::remoteSearchResults, this,
-        [this](const QString& /*query*/, const QJsonArray& torrents) {
-            if (currentSearchQuery_.isEmpty())
-                return;
-            for (const QJsonValue& val : torrents) {
-                SearchHit hit = codec::searchHitFromJson(val.toObject());
-                if (hit.torrent.isValid())
-                    searchResultModel->addResult(hit);
-            }
-        });
-
-    // Remote file-search hits.
-    connect(peerApi, &rats::peer::PeerApi::remoteFileSearchResults, this,
-        [this](const QString& /*query*/, const QJsonArray& torrents) {
-            if (currentSearchQuery_.isEmpty())
-                return;
-            for (const QJsonValue& val : torrents) {
-                SearchHit hit = codec::searchHitFromJson(val.toObject());
-                hit.fromFileMatch = true;
-                if (hit.torrent.isValid())
-                    searchResultModel->addFileResult(hit);
-            }
-        });
-
+    const auto queueResults = [this](const QString& searchId, const QJsonArray& torrents) {
+        if (searchId.isEmpty() || searchId != currentSearchId_)
+            return;
+        for (const auto& value : torrents) {
+            auto hit = codec::searchHitFromJson(value.toObject());
+            if (hit.torrent.isValid())
+                pendingRemoteResults_.append(std::move(hit));
+        }
+        if (!pendingRemoteResults_.isEmpty() && !remoteResultsTimer_->isActive())
+            remoteResultsTimer_->start();
+    };
+    connect(peerApi, &rats::peer::PeerApi::remoteSearchResults, this, queueResults);
+    connect(peerApi, &rats::peer::PeerApi::remoteFileSearchResults, this, queueResults);
 }
 
 // --- Search filters (size / file-count ranges) ------------------------------
@@ -1010,10 +1049,19 @@ void MainWindow::resetSearchFilters()
 
 void MainWindow::performSearch(const QString& query)
 {
-    if (query.isEmpty())
+    if (query.trimmed().isEmpty())
         return;
+    if (const QString error = SearchService::queryError(query); !error.isEmpty()) {
+        showStatusMessage(error, 5000);
+        return;
+    }
 
     currentSearchQuery_ = query;
+    const QString searchId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    currentSearchId_ = searchId;
+    remoteResultsTimer_->stop();
+    pendingRemoteResults_.clear();
+    const QString dhtHash = SearchService::extractInfoHash(query);
     // Remember what the user searched for (a no-op while history is disabled).
     if (app_->searchHistory())
         app_->searchHistory()->add(query);
@@ -1040,6 +1088,7 @@ void MainWindow::performSearch(const QString& query)
     req.sort = sort;
     req.descending = sortData.endsWith("desc");
     req.safeSearch = safeSearchCheckBox->isChecked();
+    req.fuzzy = fuzzySearchCheckBox->isChecked();
     req.contentType = typeComboBox->currentData().toString();
 
     const SearchFilters filters = currentSearchFilters();
@@ -1049,75 +1098,35 @@ void MainWindow::performSearch(const QString& query)
     req.filesMax = filters.filesMax;
 
     searchResultModel->clearResults();
+    onDetailsPanelCloseRequested();
+    if (app_->peerApi())
+        app_->peerApi()->requestSearch(searchId, req);
 
-    // Local torrent search (synchronous).
-    QVector<SearchHit> hits;
-    if (app_->search())
-        hits = app_->search()->searchTorrents(req);
-    searchResultModel->setResults(hits);
-    showStatusMessage(tr("✅ Found %n torrent(s)", nullptr, static_cast<int>(hits.size())), 3000);
-
-    // Local file search — merged in as file-match results.
-    if (app_->search()) {
-        QVector<SearchHit> fileHits = app_->search()->searchFiles(req);
-        if (!fileHits.isEmpty()) {
-            searchResultModel->addFileResults(fileHits);
-            showStatusMessage(
-                tr("✅ Found %1 total results (incl. file matches)").arg(searchResultModel->resultCount()), 3000);
-        }
-    }
-
-    // Ask connected peers as well; their answers stream back via peerApi signals.
-    if (app_->transport() && app_->transport()->isRunning() && query.length() > 2) {
-        QJsonObject msg;
-        msg["query"] = query;
-        msg["text"] = query;
-        msg["limit"] = 50;
-        msg["orderBy"] = sort;
-        msg["orderDesc"] = req.descending;
-        msg["safeSearch"] = req.safeSearch;
-        if (!req.contentType.isEmpty())
-            msg["type"] = req.contentType;
-        // Ranges travel in the same {min,max} shape the REST router takes. An
-        // unset bound is left out entirely rather than sent as 0, so a peer that
-        // does read them cannot mistake "any" for "at least nothing".
-        if (filters.sizeMin > 0 || filters.sizeMax > 0) {
-            QJsonObject size;
-            if (filters.sizeMin > 0)
-                size["min"] = filters.sizeMin;
-            if (filters.sizeMax > 0)
-                size["max"] = filters.sizeMax;
-            msg["size"] = size;
-        }
-        if (filters.filesMin > 0 || filters.filesMax > 0) {
-            QJsonObject files;
-            if (filters.filesMin > 0)
-                files["min"] = filters.filesMin;
-            if (filters.filesMax > 0)
-                files["max"] = filters.filesMax;
-            msg["files"] = files;
-        }
-        app_->transport()->broadcastMessage("searchTorrent", msg);
-        app_->transport()->broadcastMessage("searchFiles", msg);
-    }
-
-    // DHT fallback: an info-hash query (bare hash OR a magnet link) that isn't
-    // indexed locally — pull the metadata from the DHT and add it as a result.
-    const QString dhtHash = SearchService::extractInfoHash(query);
-    if (hits.isEmpty() && !dhtHash.isEmpty() && app_->api()) {
-        app_->api()->call(
-            "torrent.get", QJsonObject { { "hash", dhtHash }, { "files", true } }, [this, query](const Result& result) {
-                if (!result.ok() || currentSearchQuery_ != query)
+    const auto mode = dhtHash.isEmpty() ? SearchService::Mode::Both : SearchService::Mode::Torrents;
+    if (!app_->search()->searchAsync(this, req, mode, SearchService::Lane::Desktop,
+            [this, searchId, dhtHash](SearchService::Results found) {
+                if (currentSearchId_ != searchId)
                     return;
-                Torrent t = codec::torrentFromJson(result.data().toObject());
-                if (t.isValid()) {
-                    SearchHit hit;
-                    hit.torrent = t;
-                    searchResultModel->addResult(hit);
-                    showStatusMessage(tr("✅ Found torrent via DHT"), 3000);
-                }
-            });
-    }
+                const bool missedHash = found.torrents.isEmpty() && !dhtHash.isEmpty();
+                found.torrents.append(std::move(found.files));
+                searchResultModel->addResults(found.torrents);
+                showStatusMessage(tr("✅ Found %n torrent(s)", nullptr, searchResultsFilter_->rowCount()), 3000);
+                if (!missedHash || !app_->api())
+                    return;
+                QPointer<MainWindow> self(this);
+                app_->api()->call("torrent.get", { { "hash", dhtHash }, { "files", true } },
+                    [self, searchId](const Result& result) {
+                        if (!self || !result.ok() || self->currentSearchId_ != searchId)
+                            return;
+                        SearchHit hit;
+                        hit.torrent = codec::torrentFromJson(result.data().toObject());
+                        if (hit.torrent.isValid()) {
+                            self->searchResultModel->addResult(hit);
+                            self->showStatusMessage(tr("✅ Found torrent via DHT"), 3000);
+                        }
+                    });
+            }))
+        showStatusMessage(tr("Search is busy. Try again."), 3000);
 }
 
 void MainWindow::updateStatusBar()
@@ -1148,7 +1157,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (closeToTray && trayIcon && trayIcon->isVisible()) {
         hide();
         if (!trayNotificationShown_) {
-            trayIcon->showMessage(tr("Rats Search"), tr("Application is still running in the system tray."),
+            trayIcon->showMessage(tr("Rats Search Adv"), tr("Application is still running in the system tray."),
                 QSystemTrayIcon::Information, 2000);
             trayNotificationShown_ = true;
         }
@@ -1159,7 +1168,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     // Confirm exit, unless the user switched the prompt off (here via "Don't ask
     // again", or in Settings).
     if (!config || config->confirmExit()) {
-        QMessageBox box(QMessageBox::Question, tr("Confirm Exit"), tr("Are you sure you want to exit Rats Search?"),
+        QMessageBox box(QMessageBox::Question, tr("Confirm Exit"), tr("Are you sure you want to exit Rats Search Adv?"),
             QMessageBox::Yes | QMessageBox::No, this);
         box.setDefaultButton(QMessageBox::Yes);
         QCheckBox* dontAsk = new QCheckBox(tr("Don't ask again"), &box);
@@ -1333,9 +1342,13 @@ void MainWindow::clearSearchHistory()
 
 void MainWindow::onTorrentSelected(const QModelIndex& index)
 {
-    if (!index.isValid())
+    if (!index.isValid()) {
+        if (tabWidget->currentWidget() == resultsTableView->parentWidget()
+            && !resultsTableView->selectionModel()->hasSelection())
+            onDetailsPanelCloseRequested();
         return;
-    const SearchHit hit = searchResultModel->getHit(index.row());
+    }
+    const SearchHit hit = searchResultModel->getHit(searchResultsFilter_->mapToSource(index).row());
     if (!hit.torrent.isValid())
         return;
 
@@ -1346,7 +1359,7 @@ void MainWindow::onTorrentDoubleClicked(const QModelIndex& index)
 {
     if (!index.isValid())
         return;
-    Torrent torrent = searchResultModel->getTorrent(index.row());
+    Torrent torrent = searchResultModel->getTorrent(searchResultsFilter_->mapToSource(index).row());
     if (torrent.isValid())
         openMagnetLink(torrent);
 }
@@ -1367,11 +1380,15 @@ void MainWindow::onTabChanged(int index)
         return;
 
     Torrent selectedTorrent;
+    QString selectedPeer;
 
     if (currentWidget == resultsTableView->parentWidget()) {
-        QModelIndex idx = resultsTableView->currentIndex();
-        if (idx.isValid())
-            selectedTorrent = searchResultModel->getTorrent(idx.row());
+        const auto idx = searchResultsFilter_->mapToSource(resultsTableView->currentIndex());
+        if (idx.isValid()) {
+            const auto hit = searchResultModel->getHit(idx.row());
+            selectedTorrent = hit.torrent;
+            selectedPeer = hit.sourcePeerId;
+        }
     } else if (currentWidget == downloadsWidget) {
         // Downloads tab has no torrent selection — hide the detail panels.
         detailsPanel->hide();
@@ -1385,7 +1402,7 @@ void MainWindow::onTabChanged(int index)
     }
 
     if (selectedTorrent.isValid()) {
-        showTorrentDetails(selectedTorrent);
+        showTorrentDetails(selectedTorrent, selectedPeer);
     } else {
         detailsPanel->hide();
         filesWidget->clear();
@@ -1395,6 +1412,7 @@ void MainWindow::onTabChanged(int index)
 
 void MainWindow::onDetailsPanelCloseRequested()
 {
+    ++filesRequestId_;
     detailsPanel->hide();
     filesWidget->clear();
     filesWidget->hide();
@@ -1440,6 +1458,36 @@ void MainWindow::addToFavorites(const Torrent& torrent)
 {
     if (app_->favorites() && torrent.isValid())
         app_->favorites()->add(torrent);
+}
+
+QVector<Torrent> MainWindow::selectedSearchTorrents() const
+{
+    QVector<Torrent> torrents;
+    for (const auto& index : resultsTableView->selectionModel()->selectedRows()) {
+        auto torrent = searchResultModel->getTorrent(searchResultsFilter_->mapToSource(index).row());
+        if (torrent.isValid())
+            torrents.append(std::move(torrent));
+    }
+    return torrents;
+}
+
+void MainWindow::addSelectedSearchFavorites()
+{
+    auto* favorites = app_->favorites();
+    auto torrents = selectedSearchTorrents();
+    if (!favorites || torrents.isEmpty())
+        return;
+    torrents.removeIf([&](const Torrent& torrent) { return favorites->isFavorite(torrent.hash); });
+    if (torrents.isEmpty()) {
+        showStatusMessage(tr("The selected torrents are already in Favorites."), 3000);
+        return;
+    }
+    const auto folder = FavoritesWidget::chooseFolder(this, favorites->folders(), tr("Add to Favorites"));
+    if (!folder)
+        return;
+    const auto added = favorites->addMany(torrents, *folder);
+    if (added > 0)
+        showStatusMessage(tr("Added %n torrent(s) to Favorites", nullptr, static_cast<int>(added)), 3000);
 }
 
 void MainWindow::onDownloadRequested(const QString& hash)
@@ -1501,7 +1549,8 @@ void MainWindow::showTorrentContextMenu(const QPoint& pos)
     if (!index.isValid())
         return;
 
-    Torrent torrent = searchResultModel->getTorrent(index.row());
+    const auto hit = searchResultModel->getHit(searchResultsFilter_->mapToSource(index).row());
+    const Torrent& torrent = hit.torrent;
     if (!torrent.isValid())
         return;
 
@@ -1513,18 +1562,20 @@ void MainWindow::showTorrentContextMenu(const QPoint& pos)
 
     // Favorites.
     if (app_->favorites()) {
-        if (app_->favorites()->isFavorite(torrent.hash)) {
+        const auto selected = resultsTableView->selectionModel();
+        if (!selected->isSelected(index))
+            selected->setCurrentIndex(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        if (selected->selectedRows().size() > 1) {
+            contextMenu.addAction(tr("Add selected to Favorites"), this, &MainWindow::addSelectedSearchFavorites);
+        } else if (app_->favorites()->isFavorite(torrent.hash)) {
             QAction* removeFavAction = contextMenu.addAction(tr("★ Remove from Favorites"));
             connect(removeFavAction, &QAction::triggered, [this, torrent]() {
-                app_->favorites()->remove(torrent.hash);
-                showStatusMessage(tr("Removed from favorites"), 2000);
+                if (app_->favorites()->remove(torrent.hash))
+                    showStatusMessage(tr("Removed from favorites"), 2000);
             });
         } else {
             QAction* addFavAction = contextMenu.addAction(tr("⭐ Add to Favorites"));
-            connect(addFavAction, &QAction::triggered, [this, torrent]() {
-                addToFavorites(torrent);
-                showStatusMessage(tr("Added to favorites: %1").arg(torrent.name), 2000);
-            });
+            connect(addFavAction, &QAction::triggered, this, &MainWindow::addSelectedSearchFavorites);
         }
     }
 
@@ -1534,7 +1585,9 @@ void MainWindow::showTorrentContextMenu(const QPoint& pos)
     connect(exportAction, &QAction::triggered, [this, torrent]() { exportTorrentToFile(torrent); });
 
     QAction* detailsAction = contextMenu.addAction(tr("Show Details"));
-    connect(detailsAction, &QAction::triggered, [this, index]() { onTorrentSelected(index); });
+    connect(detailsAction, &QAction::triggered, this, [this, hit]() {
+        showTorrentDetails(hit.torrent, hit.sourcePeerId);
+    });
 
     contextMenu.exec(resultsTableView->viewport()->mapToGlobal(pos));
 }
@@ -1712,7 +1765,7 @@ void MainWindow::showSettings()
 void MainWindow::showAbout()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("About Rats Search"));
+    dialog.setWindowTitle(tr("About Rats Search Adv"));
     dialog.setFixedSize(420, 380);
     dialog.setStyleSheet(this->styleSheet());
 
@@ -1725,7 +1778,7 @@ void MainWindow::showAbout()
     logoLabel->setObjectName("aboutLogoLabel");
     layout->addWidget(logoLabel);
 
-    QLabel* titleLabel = new QLabel(QString("Rats Search %1").arg(RATSSEARCH_VERSION_STRING));
+    QLabel* titleLabel = new QLabel(QString("Rats Search Adv %1").arg(RATSSEARCH_VERSION_STRING));
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setObjectName("aboutTitleLabel");
     layout->addWidget(titleLabel);
@@ -1758,7 +1811,7 @@ void MainWindow::showAbout()
     layout->addWidget(copyrightLabel);
 
     QLabel* linkLabel
-        = new QLabel(QString("<a href='https://github.com/DEgITx/rats-search'>%1</a>").arg(tr("GitHub Repository")));
+        = new QLabel(QString("<a href='https://github.com/MikiyaKkt/rats-search-DEV'>%1</a>").arg(tr("GitHub Repository")));
     linkLabel->setAlignment(Qt::AlignCenter);
     linkLabel->setObjectName("linkLabel");
     linkLabel->setOpenExternalLinks(true);
@@ -1810,7 +1863,7 @@ void MainWindow::showChangelog()
 
     layout->addLayout(headerLayout);
 
-    QLabel* subtitleLabel = new QLabel(tr("Recent changes and updates to Rats Search"));
+    QLabel* subtitleLabel = new QLabel(tr("Recent changes and updates to Rats Search Adv"));
     subtitleLabel->setObjectName("hintLabel");
     layout->addWidget(subtitleLabel);
 
@@ -1959,7 +2012,7 @@ void MainWindow::createTorrent()
     layout->addWidget(commentLabel);
 
     QLineEdit* commentEdit = new QLineEdit();
-    commentEdit->setPlaceholderText(tr("Created with Rats Search"));
+    commentEdit->setPlaceholderText(tr("Created with Rats Search Adv"));
     layout->addWidget(commentEdit);
 
     QCheckBox* seedCheckBox = new QCheckBox(tr("Start seeding immediately"));
@@ -2012,7 +2065,7 @@ void MainWindow::createTorrent()
 
         QString comment = commentEdit->text().trimmed();
         if (comment.isEmpty())
-            comment = "Created with Rats Search";
+            comment = "Created with Rats Search Adv";
 
         auto progressCallback = [progressBar](int current, int total) {
             if (total > 0) {
@@ -2228,7 +2281,7 @@ void MainWindow::setupSystemTray()
 
     trayIcon = new QSystemTrayIcon(this);
     trayIcon->setIcon(QIcon(":/images/icon.png"));
-    trayIcon->setToolTip(tr("Rats Search - P2P Torrent Search Engine"));
+    trayIcon->setToolTip(tr("Rats Search Adv - P2P Torrent Search Engine"));
 
     trayMenu = new QMenu(this);
     trayMenu->setStyleSheet(this->styleSheet());
@@ -2315,7 +2368,7 @@ void MainWindow::changeEvent(QEvent* event)
         if (isMinimized() && minimizeToTray && trayIcon && trayIcon->isVisible()) {
             QTimer::singleShot(0, this, &QWidget::hide);
             if (trayIcon && !trayNotificationShown_) {
-                trayIcon->showMessage(tr("Rats Search"), tr("Application minimized to tray. Click to restore."),
+                trayIcon->showMessage(tr("Rats Search Adv"), tr("Application minimized to tray. Click to restore."),
                     QSystemTrayIcon::Information, 2000);
                 trayNotificationShown_ = true;
             }
@@ -2410,6 +2463,7 @@ void MainWindow::loadSettings()
 
     restoreComboData(settings, "search/type", typeComboBox);
     restoreComboData(settings, "search/sort", sortComboBox);
+    hideFavoritesCheckBox->setChecked(settings.value("search/hideFavorites", false).toBool());
     // Units before values, so the max-below-min correction in
     // updateSearchFiltersButton() compares the real byte counts.
     restoreComboData(settings, "search/sizeMinUnit", sizeMinUnit);
@@ -2444,6 +2498,7 @@ void MainWindow::saveSettings()
 
         settings.setValue("search/type", typeComboBox->currentData());
         settings.setValue("search/sort", sortComboBox->currentData());
+        settings.setValue("search/hideFavorites", hideFavoritesCheckBox->isChecked());
         settings.setValue("search/sizeMin", sizeMinSpin->value());
         settings.setValue("search/sizeMinUnit", sizeMinUnit->currentData());
         settings.setValue("search/sizeMax", sizeMaxSpin->value());
@@ -2474,7 +2529,7 @@ void MainWindow::checkForUpdates()
         updates, &UpdateService::noUpdateAvailable, this,
         [this]() {
             QMessageBox::information(this, tr("No Updates Available"),
-                tr("You are running the latest version of Rats Search (%1).").arg(UpdateService::currentVersion()));
+                tr("You are running the latest version of Rats Search Adv (%1).").arg(UpdateService::currentVersion()));
         },
         Qt::SingleShotConnection);
 
@@ -2502,7 +2557,7 @@ void MainWindow::onUpdateAvailable(const QString& version, const QString& releas
     headerLabel->setObjectName("headerLabel");
     layout->addWidget(headerLabel);
 
-    QLabel* versionLabel = new QLabel(tr("A new version of Rats Search is available.\n\n"
+    QLabel* versionLabel = new QLabel(tr("A new version of Rats Search Adv is available.\n\n"
                                          "Current version: %1\n"
                                          "New version: %2")
             .arg(UpdateService::currentVersion(), version));
@@ -2657,7 +2712,7 @@ void MainWindow::reportBug()
                   "- Qt: %4\n")
               .arg(RATSSEARCH_VERSION_STRING, RATSSEARCH_GIT_DESCRIBE, QSysInfo::prettyProductName(), qVersion());
 
-    QUrl url("https://github.com/DEgITx/rats-search/issues/new");
+    QUrl url("https://github.com/MikiyaKkt/rats-search-DEV/issues/new");
     QUrlQuery query;
     query.addQueryItem("labels", "bug");
     query.addQueryItem("title", "[Bug] ");
@@ -2679,7 +2734,7 @@ void MainWindow::requestFeature()
                            "App Version: %1\n")
                        .arg(RATSSEARCH_VERSION_STRING);
 
-    QUrl url("https://github.com/DEgITx/rats-search/issues/new");
+    QUrl url("https://github.com/MikiyaKkt/rats-search-DEV/issues/new");
     QUrlQuery query;
     query.addQueryItem("labels", "enhancement");
     query.addQueryItem("title", "[Feature] ");
@@ -2721,7 +2776,7 @@ bool MainWindow::showAgreementDialog()
     logoLabel->setObjectName("aboutLogoLabel");
     headerLayout->addWidget(logoLabel);
 
-    QLabel* titleLabel = new QLabel(tr("Rats Search - License Agreement"));
+    QLabel* titleLabel = new QLabel(tr("Rats Search Adv - License Agreement"));
     titleLabel->setObjectName("aboutTitleLabel");
     headerLayout->addWidget(titleLabel);
     headerLayout->addStretch();
@@ -2762,7 +2817,7 @@ bool MainWindow::showAgreementDialog()
 
 **IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE**
 
-By using Rats Search, you acknowledge and agree that:
+By using Rats Search Adv, you acknowledge and agree that:
 
 1. **ASSUMPTION OF RISK**: You assume ALL risks associated with the use of this Software, including legal, security, and privacy risks.
 

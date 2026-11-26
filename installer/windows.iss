@@ -1,7 +1,7 @@
-#define MyAppName "Rats Search"
+#define MyAppName "Rats Search Adv"
 #define MyAppExeName "RatsSearch.exe"
-#define MyAppPublisher "DEgITx"
-#define MyAppURL "https://github.com/DEgITx/rats-search"
+#define MyAppPublisher "MikiyaKkt"
+#define MyAppURL "https://github.com/MikiyaKkt/rats-search-DEV"
 
 [Setup]
 AppId={{B5E7F3A2-8C4D-4E6F-9A1B-2D3C4E5F6A7B}
@@ -15,7 +15,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=.
-OutputBaseFilename=RatsSearch-Windows-x64-{#MyAppVersion}-setup
+OutputBaseFilename=RatsSearch-Windows-x64-Adv-{#MyAppVersion}-setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

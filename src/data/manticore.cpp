@@ -16,6 +16,8 @@
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
+#include <algorithm>
+#include <cerrno>
 
 #ifdef Q_OS_WIN
 // windows.h must precede tlhelp32.h — the latter depends on types it declares.
@@ -84,7 +86,7 @@ bool isProcessRunning(qint64 pid)
 #ifdef Q_OS_WIN
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
     if (hProcess == NULL) {
-        return false;
+        return GetLastError() == ERROR_ACCESS_DENIED;
     }
     DWORD exitCode;
     bool running = GetExitCodeProcess(hProcess, &exitCode) && exitCode == STILL_ACTIVE;
@@ -92,7 +94,7 @@ bool isProcessRunning(qint64 pid)
     return running;
 #else
     // Unix: check if process exists by sending signal 0
-    return kill(static_cast<pid_t>(pid), 0) == 0;
+    return kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM;
 #endif
 }
 
@@ -180,6 +182,16 @@ bool Manticore::attachToExternalInstance(qint64 startupElapsedMs)
     return true;
 }
 
+bool Manticore::hasLiveDaemon(const QString& dataDirectory)
+{
+    QFile pidFile(QDir(dataDirectory).filePath(QStringLiteral("searchd.pid")));
+    if (!pidFile.exists())
+        return false;
+    if (!pidFile.open(QIODevice::ReadOnly))
+        return true;
+    return isProcessRunning(pidFile.read(64).trimmed().toLongLong());
+}
+
 bool Manticore::resolveSearchdPath()
 {
     searchdPath_ = findSearchdPath();
@@ -254,7 +266,7 @@ bool Manticore::launchSearchdProcess()
     searchdLogOffset_ = QFileInfo(searchdLogPath_).size();
 
     QStringList args;
-    args << "--config" << configPath_;
+    args << "--config" << searchdConfigArgument(*process_);
 
 #ifdef Q_OS_WIN
     // On Windows, searchd runs as a daemon (forks itself and the parent exits).
@@ -396,7 +408,7 @@ void Manticore::shutdownProcess()
     if (!searchdPath_.isEmpty() && QFile::exists(configPath_)) {
         QProcess stopProcess;
         QStringList args;
-        args << "--config" << configPath_ << "--stopwait";
+        args << "--config" << searchdConfigArgument(stopProcess) << "--stopwait";
         qInfo() << "Executing stopwait:" << searchdPath_ << args;
         stopProcess.start(searchdPath_, args);
         if (!stopProcess.waitForFinished(kStopWaitTimeoutMs)) {
@@ -759,6 +771,25 @@ void Manticore::checkConnection()
     }
 }
 
+bool Manticore::useRelativeSearchdPaths() const
+{
+#ifdef Q_OS_WIN
+    // The bundled Windows daemon opens paths with narrow APIs. The process
+    // working directory itself is passed through the Unicode process API.
+    return std::any_of(dataDirectory_.cbegin(), dataDirectory_.cend(), [](QChar c) { return c.unicode() > 127; });
+#else
+    return false;
+#endif
+}
+
+QString Manticore::searchdConfigArgument(QProcess& process) const
+{
+    if (!useRelativeSearchdPaths())
+        return configPath_;
+    process.setWorkingDirectory(QDir(dataDirectory_).absolutePath());
+    return QFileInfo(configPath_).fileName();
+}
+
 bool Manticore::generateConfig()
 {
     QString config = QString(R"(
@@ -769,6 +800,9 @@ index torrents
     
     min_prefix_len = 3
     expand_keywords = 1
+    charset_table = non_cont
+    ngram_len = 1
+    ngram_chars = cont
     
     rt_attr_string = hash
     rt_attr_string = name
@@ -796,6 +830,9 @@ index files
 {
     type = rt
     path = %1/files
+    charset_table = non_cont
+    ngram_len = 1
+    ngram_chars = cont
     
     rt_field = path
     rt_attr_string = hash
@@ -847,9 +884,9 @@ searchd
     binlog_path = %3
 }
 )")
-                         .arg(databasePath_)
+                         .arg(useRelativeSearchdPaths() ? QStringLiteral("./database") : databasePath_)
                          .arg(port_)
-                         .arg(dataDirectory_);
+                         .arg(useRelativeSearchdPaths() ? QStringLiteral(".") : dataDirectory_);
 
     QFile file(configPath_);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {

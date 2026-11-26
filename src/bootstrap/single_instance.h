@@ -41,6 +41,7 @@ public:
     bool tryAcquire();
 
     bool isPrimary() const { return primary_; }
+    bool holdsLock() const;
 
     /**
      * @brief Describe the process holding the lock ("pid 1234, RatsSearch").

@@ -3,6 +3,7 @@
 
 #include <QFuture>
 #include <QJsonObject>
+#include <QMap>
 #include <QMutex>
 #include <QObject>
 #include <QString>
@@ -54,6 +55,7 @@ public:
     // Run synchronous (blocking) migrations. These MUST complete before the
     // application can start. Returns true if all sync migrations succeeded.
     bool runSyncMigrations();
+    bool searchIndexReady() const;
 
     // Start asynchronous (background) migrations. These run in the background and
     // can be interrupted and resumed.
@@ -99,6 +101,7 @@ private:
         bool isSync = false;
         SyncMigrationFunc syncBody;
         AsyncMigrationFunc asyncBody;
+        bool checkOnFreshInstall = false;
     };
 
     // Persisted state for an interrupted/resumable async migration.
@@ -122,7 +125,7 @@ private:
     // State persistence ---------------------------------------------------------
     // Persist the current migration state to disk. Called on progress ticks, when
     // a migration completes and when stopping.
-    void saveState();
+    bool saveState();
     void loadState();
     bool isMigrationCompleted(const QString& migrationId) const;
     void markMigrationCompleted(const QString& migrationId);
@@ -143,6 +146,7 @@ private:
     // find the rows that still carry a counter id, so no service may run against
     // a half-migrated table.
     bool syncDeriveRowIds();
+    bool syncReindexSearch();
     // Async (background, resumable).
     void recategorizeTorrents();
     void removeUnknownTorrents();
@@ -159,6 +163,12 @@ private:
     // Persisted state (guarded by stateMutex_).
     QStringList completedMigrations_;
     MigrationState inProgressMigration_;
+    struct SearchCheckpoint {
+        qint64 afterId = 0;
+        qint64 rows = 0;
+        bool complete = false;
+    };
+    QMap<QString, SearchCheckpoint> searchCheckpoints_;
     QString lastVersion_;
     mutable QMutex stateMutex_;
 

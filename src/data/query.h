@@ -47,6 +47,45 @@ bool isIdentifier(const QString& identifier);
 
 namespace rats::data {
 
+// Parsed user input. Only this class introduces operators into a MATCH expression.
+class FullTextQuery {
+public:
+    enum class Error { None, UnclosedQuote, EmptyPhrase };
+
+    static FullTextQuery parse(const QString& text);
+    static bool allowsShortQuery(const QString& text);
+
+    struct FuzzyTerm {
+        qsizetype index;
+        QString text;
+        bool continuous;
+        QStringList anchors() const;
+        bool matches(const QString& source) const;
+    };
+    QVector<FuzzyTerm> fuzzyTerms() const;
+    FullTextQuery withAlternatives(qsizetype index, const QStringList& alternatives) const;
+
+    Error error() const { return error_; }
+    bool isEmpty() const { return terms_.isEmpty(); }
+    bool hasExactPhrase() const { return hasExactPhrase_; }
+    const QStringList& continuousTerms() const { return continuousTerms_; }
+    QString expression(bool prefixIndex) const;
+
+private:
+    enum class Kind { Word, Continuous, Phrase, Alternatives };
+    struct Term {
+        QString text;
+        Kind kind;
+        QStringList alternatives;
+        bool wildcard = false;
+    };
+
+    QVector<Term> terms_;
+    QStringList continuousTerms_;
+    Error error_ = Error::None;
+    bool hasExactPhrase_ = false;
+};
+
 // A small fluent builder for SELECT statements with safe WHERE / IN / ORDER BY
 // / LIMIT. Numeric conditions are added via whereRaw() by trusted callers; all
 // string values go through the escaping above. ORDER BY columns are validated
@@ -57,6 +96,7 @@ public:
 
     SelectQuery& columns(const QString& expr); // default "*"
     SelectQuery& matchAgainst(const QString& userQuery); // WHERE MATCH('escaped')
+    SelectQuery& matchAgainst(const FullTextQuery& query, bool prefixIndex);
     SelectQuery& whereEq(const QString& column, const QVariant& value);
     // Numeric IN. qint64 cannot carry an injection, so the values are rendered
     // directly — this is the form every hash lookup uses now that row ids are
@@ -65,7 +105,10 @@ public:
     SelectQuery& whereInIds(const QString& column, const QVector<qint64>& values);
     SelectQuery& whereRaw(const QString& condition); // trusted numeric fragment
     SelectQuery& orderBy(const QString& column, bool descending);
+    SelectQuery& withStableOrder();
     SelectQuery& limit(int offset, int count);
+    SelectQuery& maxMatches(int count);
+    SelectQuery& maxQueryTime(int milliseconds);
 
     QString build() const;
 
@@ -75,6 +118,9 @@ private:
     QStringList conditions_;
     QString orderClause_;
     QString limitClause_;
+    bool disableKeywordExpansion_ = false;
+    int maxMatches_ = 0;
+    int maxQueryTime_ = 0;
 };
 
 } // namespace rats::data

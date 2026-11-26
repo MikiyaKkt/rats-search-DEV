@@ -46,7 +46,7 @@ void MigrationProgressWindow::setupUi()
     // be mistaken for the last window closing.
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_QuitOnClose, false);
-    setWindowTitle(tr("Rats Search"));
+    setWindowTitle(tr("Rats Search Adv"));
     setWindowIcon(QIcon(":/images/icon.png"));
     setObjectName(QStringLiteral("migrationSplash"));
     setFixedSize(460, 210);

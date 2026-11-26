@@ -12,8 +12,8 @@ The script builds Release, runs the application tests, deploys Qt and compiler
 runtime DLLs, copies Manticore, verifies the staged executable starts without
 the toolchain on PATH, and creates:
 
-- `dist/RatsSearch-Windows-x64-s3-fix1.zip`
-- `dist/RatsSearch-Windows-x64-s3-fix1.zip.sha256`
+- `dist/RatsSearch-Windows-x64-Adv-s3-fix1.zip`
+- `dist/RatsSearch-Windows-x64-Adv-s3-fix1.zip.sha256`
 
 The S3 fix1 validation build uses a separate filename and preserves the previously
 delivered stable and S0–S3 ZIPs. It fixes remembered task settings, startup progress,

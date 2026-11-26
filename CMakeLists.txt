@@ -17,6 +17,7 @@ set(VERSION_MINOR ${CMAKE_MATCH_2})
 set(VERSION_PATCH ${CMAKE_MATCH_3})
 set(VERSION_BUILD 0)
 set(VERSION_STRING "${FORK_VERSION}")
+set(RATSSEARCH_PRODUCT_NAME "Rats Search Adv")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
 project(rats-search VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH} LANGUAGES CXX)
@@ -202,7 +203,8 @@ file(APPEND ${TRANSLATION_QRC} "    </qresource>\n</RCC>\n")
 
 # Windows application icon
 if(WIN32)
-    set(WIN_RC_FILE resources/app.rc)
+    configure_file(resources/version.rc.in "${CMAKE_CURRENT_BINARY_DIR}/version.rc" @ONLY)
+    set(WIN_RC_FILE resources/app.rc "${CMAKE_CURRENT_BINARY_DIR}/version.rc")
 endif()
 
 # Create executable
@@ -295,9 +297,10 @@ endif()
 # Application properties
 set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "RatsSearch"
+    MACOSX_BUNDLE_BUNDLE_NAME "${RATSSEARCH_PRODUCT_NAME}"
     MACOSX_BUNDLE_GUI_IDENTIFIER com.ratssearch.app
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
@@ -309,7 +312,7 @@ if(RATS_SEARCH_BUILD_TESTS)
 endif()
 
 message(STATUS "")
-message(STATUS "=== Rats Search Configuration ===")
+message(STATUS "=== ${RATSSEARCH_PRODUCT_NAME} Configuration ===")
 message(STATUS "Version: ${VERSION_STRING}")
 message(STATUS "Git: ${GIT_DESCRIBE}")
 message(STATUS "Qt6 version: ${Qt6_VERSION}")

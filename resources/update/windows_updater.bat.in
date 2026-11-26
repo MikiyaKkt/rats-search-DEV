@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-echo Rats Search Updater
+echo Rats Search Adv Updater
 echo ===================
 echo.
 echo Waiting for application to close...

@@ -334,8 +334,8 @@ al crear o importar un torrent se añaden automáticamente.</translation>
     <name>MainWindow</name>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="118"/>
-        <source>Rats Search %1 - BitTorrent P2P Search Engine</source>
-        <translation>Rats Search %1 - Motor de búsqueda P2P para BitTorrent</translation>
+        <source>Rats Search Adv %1 - BitTorrent P2P Search Engine</source>
+        <translation>Rats Search Adv %1 - Motor de búsqueda P2P para BitTorrent</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="203"/>
@@ -730,8 +730,8 @@ Ya estaban en su índice: %2</translation>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
         <location filename="../src/ui/mainwindow.cpp" line="2049"/>
-        <source>Rats Search</source>
-        <translation>Rats Search</translation>
+        <source>Rats Search Adv</source>
+        <translation>Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
@@ -745,8 +745,8 @@ Ya estaban en su índice: %2</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="939"/>
-        <source>Are you sure you want to exit Rats Search?</source>
-        <translation>¿Seguro que desea salir de Rats Search?</translation>
+        <source>Are you sure you want to exit Rats Search Adv?</source>
+        <translation>¿Seguro que desea salir de Rats Search Adv?</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1000"/>
@@ -951,8 +951,8 @@ Ya estaban en su índice: %2</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1472"/>
-        <source>About Rats Search</source>
-        <translation>Acerca de Rats Search</translation>
+        <source>About Rats Search Adv</source>
+        <translation>Acerca de Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1490"/>
@@ -997,8 +997,8 @@ con rastreo de DHT y búsqueda de texto completo.</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1570"/>
-        <source>Recent changes and updates to Rats Search</source>
-        <translation>Cambios y actualizaciones recientes de Rats Search</translation>
+        <source>Recent changes and updates to Rats Search Adv</source>
+        <translation>Cambios y actualizaciones recientes de Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1599"/>
@@ -1107,8 +1107,8 @@ No hay registro de cambios disponible.</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1718"/>
-        <source>Created with Rats Search</source>
-        <translation>Creado con Rats Search</translation>
+        <source>Created with Rats Search Adv</source>
+        <translation>Creado con Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1721"/>
@@ -1281,8 +1281,8 @@ Cada usuario activa esta opción por su cuenta, y los clientes antiguos no la ad
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1962"/>
-        <source>Rats Search - P2P Torrent Search Engine</source>
-        <translation>Rats Search - Motor de búsqueda de torrents P2P</translation>
+        <source>Rats Search Adv - P2P Torrent Search Engine</source>
+        <translation>Rats Search Adv - Motor de búsqueda de torrents P2P</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1967"/>
@@ -1316,8 +1316,8 @@ Cada usuario activa esta opción por su cuenta, y los clientes antiguos no la ad
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2102"/>
-        <source>You are running the latest version of Rats Search (%1).</source>
-        <translation>Está usando la última versión de Rats Search (%1).</translation>
+        <source>You are running the latest version of Rats Search Adv (%1).</source>
+        <translation>Está usando la última versión de Rats Search Adv (%1).</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2118"/>
@@ -1331,11 +1331,11 @@ Cada usuario activa esta opción por su cuenta, y los clientes antiguos no la ad
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2130"/>
-        <source>A new version of Rats Search is available.
+        <source>A new version of Rats Search Adv is available.
 
 Current version: %1
 New version: %2</source>
-        <translation>Hay una nueva versión de Rats Search disponible.
+        <translation>Hay una nueva versión de Rats Search Adv disponible.
 
 Versión actual: %1
 Versión nueva: %2</translation>
@@ -1430,8 +1430,8 @@ La aplicación se cerrará y se reiniciará automáticamente.
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2350"/>
-        <source>Rats Search - License Agreement</source>
-        <translation>Rats Search - Contrato de licencia</translation>
+        <source>Rats Search Adv - License Agreement</source>
+        <translation>Rats Search Adv - Contrato de licencia</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2356"/>
@@ -1524,8 +1524,8 @@ La aplicación se cerrará y se reiniciará automáticamente.
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="45"/>
-        <source>Rats Search Settings</source>
-        <translation>Configuración de Rats Search</translation>
+        <source>Rats Search Adv Settings</source>
+        <translation>Configuración de Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="51"/>
@@ -1579,8 +1579,8 @@ La aplicación se cerrará y se reiniciará automáticamente.
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="158"/>
-        <source>Automatically start Rats Search when you log in to your computer</source>
-        <translation>Iniciar Rats Search automáticamente al iniciar sesión en el equipo</translation>
+        <source>Automatically start Rats Search Adv when you log in to your computer</source>
+        <translation>Iniciar Rats Search Adv automáticamente al iniciar sesión en el equipo</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="161"/>

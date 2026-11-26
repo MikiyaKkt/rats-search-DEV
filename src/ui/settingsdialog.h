@@ -141,6 +141,7 @@ private:
 
     // Database
     QLineEdit* dataPathEdit_;
+    QCheckBox* migrateDataCheck_;
 
     // Downloads
     QLineEdit* downloadPathEdit_;

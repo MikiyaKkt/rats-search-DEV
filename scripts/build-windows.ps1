@@ -146,10 +146,10 @@ try {
         if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Package startup timed out.' }
         $versionOutput = $process.StandardOutput.ReadToEnd().Trim()
         $startupError = $process.StandardError.ReadToEnd()
-        if ($process.ExitCode -ne 0 -or $versionOutput -notmatch '^Rats Search ') {
+        if ($process.ExitCode -ne 0 -or $versionOutput -notmatch '^Rats Search Adv ') {
             throw "Package startup failed (exit $($process.ExitCode)): $startupError"
         }
-        if ($Release -and $versionOutput -notmatch "^Rats Search $([regex]::Escape($packageVersion))(?:\s|$)") {
+        if ($Release -and $versionOutput -notmatch "^Rats Search Adv $([regex]::Escape($packageVersion))(?:\s|$)") {
             throw "Package executable version does not match VERSION: $versionOutput"
         }
         Write-Host "Package startup verified: $versionOutput"
@@ -175,7 +175,7 @@ Qt is dynamically linked. Qt sources and license information:
   https://download.qt.io/archive/qt/6.10/6.10.1/
   https://www.qt.io/licensing/open-source-lgpl-obligations
 '@ | Set-Content "$package/README-portable.txt" -Encoding UTF8
-    $packageName = 'RatsSearch-Windows-x64' + $(if ($Release) { "-v$packageVersion" } elseif ($PackageSuffix) { "-$PackageSuffix" } else { '' }) + '.zip'
+    $packageName = 'RatsSearch-Windows-x64-Adv' + $(if ($Release) { "-v$packageVersion" } elseif ($PackageSuffix) { "-$PackageSuffix" } else { '' }) + '.zip'
     $zip = Join-Path $dist $packageName
     Compress-Archive -LiteralPath $package -DestinationPath $zip -Force -CompressionLevel Optimal
     if (-not $SkipTests) {

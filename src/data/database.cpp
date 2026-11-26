@@ -15,6 +15,19 @@
 #include <optional>
 
 namespace rats::data {
+namespace {
+bool onMainThread()
+{
+    const auto* app = QCoreApplication::instance();
+    return app && QThread::currentThread() == app->thread();
+}
+
+void logSlowMainOperation(const QElapsedTimer& timer, const QString& operation)
+{
+    if (timer.isValid() && timer.elapsed() >= 250)
+        qWarning() << "[MainThread] database" << operation << "took" << timer.elapsed() << "ms";
+}
+} // namespace
 
 Database::Database(Manticore* manticore, QObject* parent) : QObject(parent), manticore_(manticore) { }
 
@@ -30,10 +43,16 @@ Database::Rows Database::query(const QString& sql, const QVariantList& params, b
     auto& metrics = common::PerformanceMetrics::instance();
     common::PerformanceTimer timing(QStringLiteral("db.query_ms"));
     std::optional<common::PerformanceTimer> mainTiming;
-    if (QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread()) {
+    QElapsedTimer mainElapsed;
+    if (onMainThread()) {
+        mainElapsed.start();
         mainTiming.emplace(QStringLiteral("db.main_query_ms"));
         metrics.increment(QStringLiteral("db.main_query_calls"));
     }
+    const auto warn = qScopeGuard([&] {
+        if (mainElapsed.isValid() && mainElapsed.elapsed() >= 250)
+            logSlowMainOperation(mainElapsed, sql.section(u' ', 0, 0));
+    });
     metrics.increment(QStringLiteral("db.query_calls"));
     bool succeeded = false;
     const auto outcome = qScopeGuard([&] {
@@ -81,10 +100,16 @@ bool Database::runWrite(const QString& sqlText, const char* op, const QString& t
     auto& metrics = common::PerformanceMetrics::instance();
     common::PerformanceTimer timing(QStringLiteral("db.write_ms"));
     std::optional<common::PerformanceTimer> mainTiming;
-    if (QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread()) {
+    QElapsedTimer mainElapsed;
+    if (onMainThread()) {
+        mainElapsed.start();
         mainTiming.emplace(QStringLiteral("db.main_write_ms"));
         metrics.increment(QStringLiteral("db.main_write_calls"));
     }
+    const auto warn = qScopeGuard([&] {
+        if (mainElapsed.isValid() && mainElapsed.elapsed() >= 250)
+            logSlowMainOperation(mainElapsed, QString::fromLatin1(op) + u' ' + table);
+    });
     metrics.increment(QStringLiteral("db.write_calls"));
     if (metrics.enabled())
         metrics.observe(QStringLiteral("db.statement_bytes"), sqlText.toUtf8().size());

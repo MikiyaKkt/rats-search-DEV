@@ -84,6 +84,7 @@ service::SearchService::Request buildSearchRequest(const QJsonObject& params)
     req.sort = params.contains("sort") ? params["sort"].toString() : params["orderBy"].toString();
     req.descending = params["orderDesc"].toBool(true);
     req.safeSearch = params["safeSearch"].toBool(false);
+    req.fuzzy = params["fuzzy"].toBool(false);
     req.contentType = params.contains("contentType") ? params["contentType"].toString() : params["type"].toString();
 
     const QJsonObject size = params["size"].toObject();
@@ -294,9 +295,14 @@ void ApiRouter::wireEvents()
     });
     if (app_->peerApi()) {
         connect(app_->peerApi(), &peer::PeerApi::remoteSearchResults, this,
-            [this](const QString& query, const QJsonArray& torrents) {
+            [this](const QString& searchId, const QJsonArray& torrents) {
                 emit event(QStringLiteral("remoteSearchResults"),
-                    QJsonObject { { "searchId", query }, { "torrents", torrents } });
+                    QJsonObject { { "searchId", searchId }, { "torrents", torrents } });
+            });
+        connect(app_->peerApi(), &peer::PeerApi::remoteFileSearchResults, this,
+            [this](const QString& searchId, const QJsonArray& torrents) {
+                emit event(QStringLiteral("remoteFileSearchResults"),
+                    QJsonObject { { "searchId", searchId }, { "torrents", torrents } });
             });
     }
     if (app_->databaseSync()) {
@@ -344,39 +350,46 @@ void ApiRouter::registerMethods()
     // -----------------------------------------------------------------------
     add("search.torrents", [this](const QJsonObject& params, const ResultCallback& respond) {
         const service::SearchService::Request req = buildSearchRequest(params);
+        if (const QString error = service::SearchService::queryError(req.query); !error.isEmpty()) {
+            respond(Result::failure(error));
+            return;
+        }
         // A torrent search through the API is a user-initiated search, so it is
         // remembered exactly like one typed into the GUI (the store itself
         // honours the searchHistory setting). search.files is deliberately not
         // recorded: a client running both for one query would count it twice.
         app_->searchHistory()->add(req.query);
-        const QVector<domain::SearchHit> hits = app_->search()->searchTorrents(req);
-
-        QJsonArray results;
-        for (const domain::SearchHit& hit : hits)
-            results.append(domain::codec::toJson(hit));
-
-        // An info-hash query (bare hash or magnet link) with no local hit falls
-        // back to a DHT lookup on the extracted, normalized hash.
-        const QString dhtHash = service::SearchService::extractInfoHash(req.query);
-        if (hits.isEmpty() && !dhtHash.isEmpty()) {
-            dhtLookup(this, app_, dhtHash, /*includeFiles*/ false, /*asArray*/ true, respond);
-            return;
-        }
-        respond(Result::success(results));
+        using service::SearchService;
+        if (!app_->search()->searchAsync(this, req, SearchService::Mode::Torrents, SearchService::Lane::Api,
+                [this, query = req.query, respond](SearchService::Results found) {
+                    const QString dhtHash = SearchService::extractInfoHash(query);
+                    if (found.torrents.isEmpty() && !dhtHash.isEmpty()) {
+                        dhtLookup(this, app_, dhtHash, /*includeFiles*/ false, /*asArray*/ true, respond);
+                        return;
+                    }
+                    QJsonArray results;
+                    for (const auto& hit : found.torrents)
+                        results.append(domain::codec::toJson(hit));
+                    respond(Result::success(results));
+                }))
+            respond(Result::failure(tr("Search is busy. Try again.")));
     });
 
     add("search.files", [this](const QJsonObject& params, const ResultCallback& respond) {
         const service::SearchService::Request req = buildSearchRequest(params);
-        if (req.query.length() <= 2) {
-            respond(Result::failure("Query too short"));
+        if (const QString error = service::SearchService::queryError(req.query, true); !error.isEmpty()) {
+            respond(Result::failure(error));
             return;
         }
-        const QVector<domain::SearchHit> hits = app_->search()->searchFiles(req);
-
-        QJsonArray results;
-        for (const domain::SearchHit& hit : hits)
-            results.append(domain::codec::toJson(hit, { /*includeFiles*/ true }));
-        respond(Result::success(results));
+        using service::SearchService;
+        if (!app_->search()->searchAsync(this, req, SearchService::Mode::Files, SearchService::Lane::Api,
+                [respond](SearchService::Results found) {
+                    QJsonArray results;
+                    for (const auto& hit : found.files)
+                        results.append(domain::codec::toJson(hit, { /*includeFiles*/ true }));
+                    respond(Result::success(results));
+                }))
+            respond(Result::failure(tr("Search is busy. Try again.")));
     });
 
     add("search.top", [this](const QJsonObject& params, const ResultCallback& respond) {
@@ -446,27 +459,24 @@ void ApiRouter::registerMethods()
         // Optional: the peer that offered this torrent in a remote search hit.
         const QString peerId = params["peer"].toString();
 
-        std::optional<domain::Torrent> torrent = app_->search()->get(hash, includeFiles);
-
-        // A summary can exist without complete details. Repair missing or
-        // truncated lists through the offering peer, then the DHT.
-        const bool needRemoteFiles = includeFiles
-            && (!torrent || torrent->fileList.isEmpty() || torrent->fileList.size() < torrent->files);
-        if (needRemoteFiles && !peerId.isEmpty()) {
-            peerLookup(this, app_, peerId, hash, includeFiles, /*asArray*/ false, respond);
-            return;
-        }
-
-        if (!torrent || needRemoteFiles) {
-            // No complete local copy and no peer to ask: try the DHT.
-            dhtLookup(this, app_, hash, includeFiles, /*asArray*/ false, respond);
-            return;
-        }
-
-        QJsonObject obj = domain::codec::toJson(*torrent, { includeFiles });
-        if (app_->downloads()->isDownloading(hash))
-            obj["download"] = app_->downloads()->getDownload(hash).toJson();
-        respond(Result::success(obj));
+        if (!app_->search()->getAsync(this, hash, includeFiles, service::SearchService::Lane::Api,
+                [this, peerId, hash, includeFiles, respond](std::optional<domain::Torrent> torrent) {
+                    const bool needRemoteFiles = includeFiles
+                        && (!torrent || torrent->fileList.isEmpty() || torrent->fileList.size() < torrent->files);
+                    if (needRemoteFiles && !peerId.isEmpty()) {
+                        peerLookup(this, app_, peerId, hash, includeFiles, /*asArray*/ false, respond);
+                        return;
+                    }
+                    if (!torrent || needRemoteFiles) {
+                        dhtLookup(this, app_, hash, includeFiles, /*asArray*/ false, respond);
+                        return;
+                    }
+                    QJsonObject obj = domain::codec::toJson(*torrent, { includeFiles });
+                    if (app_->downloads()->isDownloading(hash))
+                        obj["download"] = app_->downloads()->getDownload(hash).toJson();
+                    respond(Result::success(obj));
+                }))
+            respond(Result::failure(tr("Search is busy. Try again.")));
     });
 
     add("torrent.remove", [this](const QJsonObject& params, const ResultCallback& respond) {

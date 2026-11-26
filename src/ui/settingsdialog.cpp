@@ -2,6 +2,7 @@
 #include "downloadtextbinder.h"
 #include "settingsdialog.h"
 #include "app/application.h"
+#include "app/data_relocation.h"
 #include "app/config_store.h"
 #include "app/search_history_store.h"
 #include "app/translation_manager.h"
@@ -27,6 +28,7 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QScrollArea>
+#include <QFileInfo>
 #include <QSettings>
 #include <QStyle>
 #include <QVBoxLayout>
@@ -51,7 +53,7 @@ void SettingsDialog::setupUi()
     dialogLayout->setContentsMargins(16, 16, 16, 16);
 
     // Title
-    QLabel* titleLabel = new QLabel(tr("Rats Search Settings"));
+    QLabel* titleLabel = new QLabel(tr("Rats Search Adv Settings"));
     titleLabel->setObjectName("headerLabel");
     dialogLayout->addWidget(titleLabel);
 
@@ -184,7 +186,7 @@ QWidget* SettingsDialog::createGeneralTab()
     startupLayout->setSpacing(10);
 
     autoStartCheck_ = new QCheckBox(tr("Start with system (autostart)"));
-    autoStartCheck_->setToolTip(tr("Automatically start Rats Search when you log in to your computer"));
+    autoStartCheck_->setToolTip(tr("Automatically start Rats Search Adv when you log in to your computer"));
     startupLayout->addRow(autoStartCheck_);
 
     startMinimizedCheck_ = new QCheckBox(tr("Start minimized"));
@@ -579,7 +581,10 @@ QWidget* SettingsDialog::createStorageTab()
     pathLayout->addWidget(browseBtn);
     dbLayout->addRow(tr("Path:"), pathLayout);
 
-    QLabel* dataPathHint = new QLabel(tr("* Database and configuration storage. Changing requires restart."));
+    migrateDataCheck_ = new QCheckBox(tr("Migrate current data on restart"));
+    migrateDataCheck_->setChecked(true);
+    dbLayout->addRow(migrateDataCheck_);
+    QLabel* dataPathHint = new QLabel(tr("Migration requires an empty destination and keeps the original files as a backup."));
     dataPathHint->setObjectName("hintLabel");
     dataPathHint->setWordWrap(true);
     dbLayout->addRow(dataPathHint);
@@ -750,14 +755,12 @@ void SettingsDialog::loadSettings()
     downloadPathEdit_->setText(config_->downloadPath());
     logMaxSizeSpin_->setValue(config_->logMaxSizeMb());
 
-    // Database - QSettings is the source of truth for the data directory (it has
-    // to be readable before rats.json, which lives inside it, can be loaded).
+    const auto pendingPath = rats::app::relocation::pending(dataDirectory_).destination;
     QSettings settings("RatsSearch", "RatsSearch");
-    QString savedDataDir = settings.value("dataDirectory").toString();
-    if (savedDataDir.isEmpty()) {
-        savedDataDir = dataDirectory_; // Use runtime directory if not saved
-    }
-    dataPathEdit_->setText(savedDataDir);
+    const auto savedPath = settings.value("dataDirectory").toString();
+    const auto displayed = pendingPath.isEmpty() ? (savedPath.isEmpty() ? dataDirectory_ : savedPath) : pendingPath;
+    dataPathEdit_->setText(displayed);
+    migrateDataCheck_->setChecked(!pendingPath.isEmpty() || displayed == dataDirectory_);
 }
 
 void SettingsDialog::saveSettings()
@@ -766,14 +769,11 @@ void SettingsDialog::saveSettings()
         return;
     auto* config_ = app_->config();
 
-    QSettings settings("RatsSearch", "RatsSearch");
-
     // Track what changed for restart notification
     int oldP2pPort = config_->p2pPort();
     int oldDhtPort = config_->dhtPort();
     int oldHttpPort = config_->httpPort();
     bool oldRestApi = config_->restApiEnabled();
-    QString oldDataDir = settings.value("dataDirectory").toString();
 
     // Save General
     config_->setLanguage(languageCombo_->currentData().toString());
@@ -832,17 +832,11 @@ void SettingsDialog::saveSettings()
         config_->setDownloadPath(newDownloadPath);
     }
 
-    // Save Data Directory to QSettings, where main.cpp reads it at startup.
-    QString newDataDir = dataPathEdit_->text();
-    if (!newDataDir.isEmpty()) {
-        settings.setValue("dataDirectory", newDataDir);
-    }
-
     // Check if restart needed (only for settings that can't be applied at
     // runtime)
     needsRestart_ = (p2pPortSpin_->value() != oldP2pPort) || (dhtPortSpin_->value() != oldDhtPort)
         || (httpPortSpin_->value() != oldHttpPort) || (restApiCheck_->isChecked() != oldRestApi)
-        || (newDataDir != oldDataDir && !newDataDir.isEmpty());
+        || !rats::app::relocation::pending(dataDirectory_).destination.isEmpty();
 
     // Save config to file
     config_->save();
@@ -926,6 +920,19 @@ void SettingsDialog::onBrowseDataPath()
 
 void SettingsDialog::onAccepted()
 {
+    namespace relocation = rats::app::relocation;
+    const QString entered = dataPathEdit_->text().trimmed();
+    const QString previous = relocation::pending(dataDirectory_).destination;
+    const bool stay = entered.isEmpty() || QDir::cleanPath(entered) == QDir::cleanPath(dataDirectory_)
+        || (QFileInfo(entered).exists() && QFileInfo(entered).canonicalFilePath() == QFileInfo(dataDirectory_).canonicalFilePath());
+    const bool migrate = !stay && migrateDataCheck_->isChecked();
+    if (migrate && entered != previous) {
+        const auto error = relocation::validate(dataDirectory_, entered);
+        if (!error.isEmpty()) {
+            QMessageBox::warning(this, tr("Data Directory"), error);
+            return;
+        }
+    }
     auto p=app_->downloads()->globalPolicy();
     p.downloadRate=qRound64(downloadLimit_->value()*1024); p.uploadRate=qRound64(uploadLimit_->value()*1024);
     p.downloadSlots=downloadSlots_->value(); p.seedSlots=seedSlots_->value(); p.metadataSlots=metadataSlots_->value();
@@ -936,7 +943,22 @@ void SettingsDialog::onAccepted()
         if(result.applied()) downloadPolicyRevision_=result.revision;
         QMessageBox::warning(this,tr("Download settings"),result.error.message); return;
     }
+    downloadPolicyRevision_ = result.revision;
+    auto error = migrate && entered != previous ? relocation::schedule(dataDirectory_, entered)
+        : (migrate ? QString() : relocation::clear(dataDirectory_));
+    if (error.isEmpty() && !migrate && !entered.isEmpty()) {
+        QSettings settings("RatsSearch", "RatsSearch");
+        settings.setValue("dataDirectory", stay ? dataDirectory_ : entered);
+        settings.sync();
+        if (settings.status() != QSettings::NoError)
+            error = tr("Could not save the new data directory.");
+    }
+    if (!error.isEmpty()) {
+        QMessageBox::warning(this, tr("Data Directory"), error);
+        return;
+    }
     saveSettings();
+    needsRestart_ = needsRestart_ || !stay;
     accept();
 }
 

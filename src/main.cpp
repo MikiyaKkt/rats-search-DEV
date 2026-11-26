@@ -3,6 +3,9 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QMessageBox>
+#include <QProgressDialog>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -14,11 +17,13 @@
 
 #include "app/application.h"
 #include "app/config_store.h"
+#include "app/data_relocation.h"
 #include "bootstrap/legacymigration.h"
 #include "bootstrap/single_instance.h"
 #include "bootstrap/startupinfo.h"
 #include "common/logging.h"
 #include "common/performance_metrics.h"
+#include "data/manticore.h"
 #include "librats/util/logger.h"
 #include "mainwindow.h"
 #include "migrationprogresswindow.h"
@@ -44,10 +49,12 @@ static QString getSavedDataDirectory()
         .toString();
 }
 
-static void saveDataDirectory(const QString& path)
+static bool saveDataDirectory(const QString& path)
 {
-    QSettings(QStringLiteral("RatsSearch"), QStringLiteral("RatsSearch"))
-        .setValue(QStringLiteral("dataDirectory"), path);
+    QSettings settings(QStringLiteral("RatsSearch"), QStringLiteral("RatsSearch"));
+    settings.setValue(QStringLiteral("dataDirectory"), path);
+    settings.sync();
+    return settings.status() == QSettings::NoError;
 }
 
 #if defined(_WIN32) && !defined(NDEBUG)
@@ -121,7 +128,7 @@ static void addCommonOptions(QCommandLineParser& parser, QCommandLineOption& por
     QCommandLineOption& dataDir, QCommandLineOption& maxPeers, QCommandLineOption& spider, QCommandLineOption& console,
     QCommandLineOption& shareDb)
 {
-    parser.setApplicationDescription(QStringLiteral("Rats Search - BitTorrent P2P Search Engine"));
+    parser.setApplicationDescription(QStringLiteral(RATSSEARCH_PRODUCT_NAME " - BitTorrent P2P Search Engine"));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption(console);
@@ -134,7 +141,8 @@ static void addCommonOptions(QCommandLineParser& parser, QCommandLineOption& por
     parser.addOption(shareDb);
 }
 
-static QString resolveDataDirectory(QCommandLineParser& parser, const QCommandLineOption& dataDirOption)
+static QString resolveDataDirectory(QCommandLineParser& parser, const QCommandLineOption& dataDirOption,
+    const QString& defaultDataDirectory)
 {
     QString dataDir;
     if (parser.isSet(dataDirOption)) {
@@ -143,7 +151,7 @@ static QString resolveDataDirectory(QCommandLineParser& parser, const QCommandLi
     } else {
         dataDir = getSavedDataDirectory();
         if (dataDir.isEmpty())
-            dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            dataDir = defaultDataDirectory;
     }
     return dataDir;
 }
@@ -221,7 +229,8 @@ static void reportMigrationsToConsole(rats::app::Application* application)
 
 // Console mode on the new rats:: architecture: build the composition root,
 // start it, and run the event loop until interrupted. No widgets.
-static int runConsoleApplication(QCoreApplication& app, rats::app::Application::Options options)
+static int runConsoleApplication(QCoreApplication& app, rats::app::Application::Options options,
+    const std::function<bool(bool)>& completeRelocation)
 {
     options.headless = true;
     g_app = &app;
@@ -230,11 +239,12 @@ static int runConsoleApplication(QCoreApplication& app, rats::app::Application::
 
     auto application = std::make_unique<rats::app::Application>(std::move(options));
     reportMigrationsToConsole(application.get());
-    if (!application->start()) {
+    const bool started = application->start();
+    if (!completeRelocation(started) || !started) {
         qCritical() << "Failed to start application";
         return 1;
     }
-    qInfo() << "Rats Search (console) running. Press Ctrl+C to quit.";
+    qInfo() << RATSSEARCH_PRODUCT_NAME " (console) running. Press Ctrl+C to quit.";
     QObject::connect(&app, &QCoreApplication::aboutToQuit, application.get(), [a = application.get()]() { a->stop(); });
     return app.exec();
 }
@@ -263,8 +273,13 @@ int main(int argc, char* argv[])
     else
         qapp = std::make_unique<QApplication>(argc, argv);
 
-    QCoreApplication::setApplicationName(QStringLiteral("Rats Search"));
     QCoreApplication::setOrganizationName(QString()); // empty avoids a nested folder
+    // Resolve the existing default profile before setting the display brand.
+    QCoreApplication::setApplicationName(QStringLiteral("Rats Search"));
+    const QString defaultDataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QCoreApplication::setApplicationName(QStringLiteral(RATSSEARCH_PRODUCT_NAME));
+    if (!consoleMode)
+        QApplication::setApplicationDisplayName(QStringLiteral(RATSSEARCH_PRODUCT_NAME));
     QCoreApplication::setApplicationVersion(QStringLiteral(RATSSEARCH_VERSION_STRING));
 
     QCommandLineOption consoleOption(QStringList() << "c" << "console", QStringLiteral("Run without a GUI"));
@@ -282,7 +297,7 @@ int main(int argc, char* argv[])
         parser, portOption, dhtPortOption, dataDirOption, maxPeersOption, spiderOption, consoleOption, shareDbOption);
     parser.process(*qapp);
 
-    const QString dataDir = resolveDataDirectory(parser, dataDirOption);
+    QString dataDir = resolveDataDirectory(parser, dataDirOption, defaultDataDirectory);
     if (!QDir().mkpath(dataDir)) {
         qCritical() << "Failed to create data directory:" << dataDir;
         return 1;
@@ -290,17 +305,89 @@ int main(int argc, char* argv[])
     // Refuse to run twice on one data directory (shared Manticore, RT tables and
     // rats.json). Must precede configureLogging(): log rotation on startup would
     // otherwise roll the running instance's log file out from under it.
-    rats::bootstrap::SingleInstanceGuard instanceGuard(dataDir);
-    if (!instanceGuard.tryAcquire()) {
-        const QString holder = instanceGuard.runningInstanceInfo();
-        qInfo().noquote() << QStringLiteral("Rats Search is already running on %1%2 - activating it")
+    auto instanceGuard = std::make_unique<rats::bootstrap::SingleInstanceGuard>(dataDir);
+    if (!instanceGuard->tryAcquire()) {
+        const QString holder = instanceGuard->runningInstanceInfo();
+        qInfo().noquote() << QStringLiteral(RATSSEARCH_PRODUCT_NAME " is already running on %1%2 - activating it")
                                  .arg(dataDir, holder.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(holder));
-        if (!instanceGuard.notifyRunningInstance())
+        if (!instanceGuard->notifyRunningInstance())
             qWarning() << "Could not reach the running instance (it may still be starting up)";
         return 0;
     }
 
-    migrateLegacyDatabase(dataDir); // one-time v1.x -> v2.0 import
+    namespace relocation = rats::app::relocation;
+    const QString originalDataDir = dataDir;
+    const auto request = relocation::pending(originalDataDir);
+    const auto relocationMessage = [consoleMode](const QString& message) {
+        qWarning().noquote() << message;
+        if (!consoleMode)
+            QMessageBox::warning(nullptr, QCoreApplication::translate("DataRelocation", "Data migration"), message);
+    };
+    std::unique_ptr<rats::bootstrap::SingleInstanceGuard> sourceGuard;
+    if (!request.destination.isEmpty()) {
+        QString error;
+        if (!instanceGuard->holdsLock() || rats::data::Manticore::hasLiveDaemon(originalDataDir)) {
+            error = QCoreApplication::translate("DataRelocation", "The source database is still in use.");
+        } else {
+            std::unique_ptr<QProgressDialog> dialog;
+            if (!consoleMode) {
+                dialog = std::make_unique<QProgressDialog>(
+                    QCoreApplication::translate("DataRelocation", "Copying database and profile…"),
+                    QCoreApplication::translate("DataRelocation", "Cancel"), 0, 100);
+                dialog->setMinimumDuration(0);
+                dialog->setAutoClose(false);
+                dialog->setAutoReset(false);
+            } else {
+                std::cout << "Copying database and profile..." << std::endl;
+            }
+            QElapsedTimer ticks;
+            ticks.start();
+            error = relocation::prepare(originalDataDir, request, [&](qint64 copied, qint64 total) {
+                if (dialog && (copied == 0 || ticks.elapsed() >= 100)) {
+                    dialog->setValue(total ? static_cast<int>(100.0 * copied / total) : 0);
+                    QCoreApplication::processEvents();
+                    ticks.restart();
+                }
+                return !dialog || !dialog->wasCanceled();
+            });
+            if (error.isEmpty()) {
+                auto destinationGuard = std::make_unique<rats::bootstrap::SingleInstanceGuard>(request.destination);
+                if (destinationGuard->tryAcquire() && destinationGuard->holdsLock()) {
+                    sourceGuard = std::move(instanceGuard);
+                    instanceGuard = std::move(destinationGuard);
+                    dataDir = request.destination;
+                } else {
+                    error = QCoreApplication::translate("DataRelocation", "The destination is in use or cannot be locked.");
+                }
+            }
+        }
+        if (!error.isEmpty()) {
+            relocationMessage(error);
+            if (const auto clearError = relocation::clear(originalDataDir); !clearError.isEmpty())
+                relocationMessage(clearError);
+        }
+    }
+    const auto completeRelocation = [&](bool started) {
+        if (!sourceGuard)
+            return true;
+        if (!started) {
+            relocationMessage(QCoreApplication::translate("DataRelocation",
+                "The copied database could not be opened. The original location is still selected."));
+            relocation::clear(originalDataDir);
+            return false;
+        }
+        if (!parser.isSet("no-remember-data-dir") && !saveDataDirectory(dataDir)) {
+            relocationMessage(QCoreApplication::translate("DataRelocation", "Could not save the new data directory."));
+            return false;
+        }
+        relocation::finish(originalDataDir, request);
+        sourceGuard.reset();
+        qInfo().noquote() << "Data migration completed:" << dataDir;
+        return true;
+    };
+
+    if (!sourceGuard)
+        migrateLegacyDatabase(dataDir); // one-time v1.x -> v2.0 import
     configureLogging(dataDir);
 
     rats::app::Application::Options options;
@@ -319,7 +406,7 @@ int main(int argc, char* argv[])
     }
 
     if (consoleMode)
-        return runConsoleApplication(*qapp, std::move(options));
+        return runConsoleApplication(*qapp, std::move(options), completeRelocation);
 
     // ---- GUI mode --------------------------------------------------------
     auto application = std::make_unique<rats::app::Application>(std::move(options));
@@ -330,7 +417,8 @@ int main(int argc, char* argv[])
     // Theme keeps it for every window after.
     rats::ui::Theme::instance().setFont(application->config()->uiFontFamily(), application->config()->uiFontScale());
     MigrationProgressWindow migrationSplash(application->migrations(), application->config()->darkMode());
-    if (!application->start()) {
+    const bool started = application->start();
+    if (!completeRelocation(started) || !started) {
         qCritical() << "Failed to start application";
         return 1;
     }
@@ -338,7 +426,7 @@ int main(int argc, char* argv[])
     MainWindow window(application.get());
     // A second launch is the user asking for the window, even when this instance
     // is sitting minimized in the tray.
-    QObject::connect(&instanceGuard, &rats::bootstrap::SingleInstanceGuard::secondInstanceStarted, &window,
+    QObject::connect(instanceGuard.get(), &rats::bootstrap::SingleInstanceGuard::secondInstanceStarted, &window,
         &MainWindow::bringToFront);
     if (!application->config()->startMinimized())
         window.show();

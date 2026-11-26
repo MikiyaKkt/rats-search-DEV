@@ -2,20 +2,27 @@
 
 #include "app/application.h"
 #include "app/config_store.h"
+#include "common/infohash.h"
 #include "data/torrent_repository.h"
 #include "domain/torrent_codec.h"
 #include "net/p2p_transport.h"
 #include "services/database_sync_service.h"
 #include "services/feed_service.h"
 #include "services/indexing_service.h"
+#include "services/peer_registry.h"
 #include "services/replication_service.h"
 #include "services/search_service.h"
 
 #include <QDebug>
+#include <QScopeGuard>
+#include <QUuid>
 
 namespace rats::peer {
 
 namespace {
+
+const QString searchV2 = QStringLiteral("search_v2");
+const QString searchV2Response = QStringLiteral("search_v2_response");
 
 // Build a SearchService request from a peer message, tolerating both the legacy
 // "navigation" wrapper and the flat top-level form the newer peers send.
@@ -54,11 +61,83 @@ QString shortId(const QString& peerId)
     return peerId.left(8);
 }
 
+QJsonObject searchOptions(const service::SearchService::Request& request)
+{
+    QJsonObject data{ { "query", request.query }, { "text", request.query }, { "index", request.offset },
+        { "limit", request.limit }, { "orderBy", request.sort }, { "orderDesc", request.descending },
+        { "safeSearch", request.safeSearch } };
+    if (!request.contentType.isEmpty())
+        data["type"] = request.contentType;
+    QJsonObject size;
+    if (request.sizeMin > 0)
+        size["min"] = request.sizeMin;
+    if (request.sizeMax > 0)
+        size["max"] = request.sizeMax;
+    if (!size.isEmpty())
+        data["size"] = size;
+    QJsonObject files;
+    if (request.filesMin > 0)
+        files["min"] = request.filesMin;
+    if (request.filesMax > 0)
+        files["max"] = request.filesMax;
+    if (!files.isEmpty())
+        data["files"] = files;
+    return data;
+}
+
 } // namespace
 
 PeerApi::PeerApi(app::Application* app, QObject* parent) : QObject(parent), app_(app)
 {
+    indexPool_.setMaxThreadCount(1);
     install();
+}
+
+PeerApi::~PeerApi()
+{
+    stopBackground();
+}
+
+void PeerApi::startBackground()
+{
+    indexCancellation_ = std::make_shared<std::atomic_bool>(false);
+}
+
+void PeerApi::stopBackground()
+{
+    if (!indexCancellation_)
+        return;
+    indexCancellation_->store(true, std::memory_order_relaxed);
+    indexCancellation_.reset();
+    indexPool_.clear();
+    indexPool_.waitForDone();
+    pendingIndexJobs_ = 0;
+}
+
+bool PeerApi::queueIndexing(QJsonArray rows, bool trackReplication, std::function<void(int)> completed)
+{
+    if (!indexCancellation_ || rows.isEmpty() || pendingIndexJobs_ >= 16)
+        return false;
+    ++pendingIndexJobs_;
+    indexPool_.start([this, rows = std::move(rows), trackReplication, completed = std::move(completed),
+                         cancellation = indexCancellation_]() {
+        const auto connection = qScopeGuard([this] { app_->torrents()->closeCurrentThreadConnection(); });
+        int inserted = 0;
+        for (const auto& item : rows) {
+            if (cancellation->load(std::memory_order_relaxed))
+                return;
+            if (item.isObject() && insertFromPeer(item.toObject(), trackReplication))
+                ++inserted;
+        }
+        QMetaObject::invokeMethod(this, [this, cancellation, inserted, completed] {
+            if (cancellation != indexCancellation_)
+                return;
+            --pendingIndexJobs_;
+            if (completed)
+                completed(inserted);
+        }, Qt::QueuedConnection);
+    });
+    return true;
 }
 
 void PeerApi::install()
@@ -71,9 +150,11 @@ void PeerApi::install()
 
     // --- Requests we answer -------------------------------------------------
     transport->registerHandler(
-        "searchTorrent", [this](const QString& peerId, const QJsonObject& data) { handleSearchRequest(peerId, data); });
+        "searchTorrent", [this](const QString& peerId, const QJsonObject& data) { handleSearchRequest(peerId, data, false); });
     transport->registerHandler("searchFiles",
-        [this](const QString& peerId, const QJsonObject& data) { handleSearchFilesRequest(peerId, data); });
+        [this](const QString& peerId, const QJsonObject& data) { handleSearchRequest(peerId, data, true); });
+    transport->registerHandler(searchV2,
+        [this](const QString& peerId, const QJsonObject& data) { handleVersionedSearch(peerId, data); });
     transport->registerHandler("topTorrents",
         [this](const QString& peerId, const QJsonObject& data) { handleTopTorrentsRequest(peerId, data); });
     transport->registerHandler(
@@ -88,10 +169,8 @@ void PeerApi::install()
         [this](const QString& peerId, const QJsonObject& data) { handleDatabaseCancel(peerId, data); });
 
     // --- Responses we consume ----------------------------------------------
-    transport->registerHandler("searchTorrent_response",
-        [this](const QString& peerId, const QJsonObject& data) { handleSearchResult(peerId, data); });
-    transport->registerHandler("searchFiles_response",
-        [this](const QString& peerId, const QJsonObject& data) { handleSearchFilesResult(peerId, data); });
+    transport->registerHandler(searchV2Response,
+        [this](const QString& peerId, const QJsonObject& data) { handleVersionedSearchResult(peerId, data); });
     transport->registerHandler("torrent_response",
         [this](const QString& peerId, const QJsonObject& data) { handleTorrentResponse(peerId, data); });
     transport->registerHandler(
@@ -110,6 +189,13 @@ void PeerApi::install()
     // Follow-up work on connect (the client_info handshake itself is
     // PeerRegistry's).
     connect(transport, &net::P2PTransport::peerConnected, this, &PeerApi::onPeerConnected);
+    connect(transport, &net::P2PTransport::peerDisconnected, this, [this](const QString& peerId) {
+        versionedSearchPeers_.remove(peerId);
+    });
+    connect(transport, &net::P2PTransport::stopped, this, [this] {
+        activeSearchId_.clear();
+        versionedSearchPeers_.clear();
+    });
 
     qInfo() << "[PeerApi] P2P handlers installed";
 }
@@ -118,41 +204,72 @@ void PeerApi::install()
 // Requests we answer
 // ============================================================================
 
-void PeerApi::handleSearchRequest(const QString& peerId, const QJsonObject& data)
+void PeerApi::requestSearch(const QString& searchId, const service::SearchService::Request& request)
 {
-    service::SearchService::Request req = parseSearchRequest(data);
-    if (req.query.length() <= 2) {
-        qInfo() << "[PeerApi] search query too short from" << shortId(peerId) << "- ignoring";
+    activeSearchId_ = searchId;
+    versionedSearchPeers_.clear();
+
+    auto* transport = app_->transport();
+    if (!transport || !transport->isRunning() || QUuid::fromString(searchId).isNull()
+        || !service::SearchService::queryError(request.query, true).isEmpty())
         return;
+    const auto stats = app_->peers()->connectedPeers();
+    QJsonObject modern = searchOptions(request);
+    modern["searchId"] = searchId;
+    modern["fuzzy"] = request.fuzzy;
+    for (const QString& peerId : transport->connectedPeerIds()) {
+        if (stats.value(peerId).searchProtocol >= domain::PeerStats::kSearchProtocol) {
+            versionedSearchPeers_.insert(peerId);
+            modern["kind"] = QStringLiteral("torrents");
+            transport->sendMessage(peerId, searchV2, modern);
+            modern["kind"] = QStringLiteral("files");
+            transport->sendMessage(peerId, searchV2, modern);
+        }
     }
-
-    const QVector<domain::SearchHit> hits = app_->search()->searchTorrents(req);
-    qInfo() << "[PeerApi] search" << req.query << "->" << hits.size() << "results for" << shortId(peerId);
-
-    for (const domain::SearchHit& hit : hits)
-        app_->transport()->sendMessage(peerId, "searchTorrent_response", domain::codec::toJson(hit.torrent));
 }
 
-void PeerApi::handleSearchFilesRequest(const QString& peerId, const QJsonObject& data)
+void PeerApi::handleVersionedSearch(const QString& peerId, const QJsonObject& data)
+{
+    const QString searchId = data["searchId"].toString();
+    const QString kind = data["kind"].toString();
+    if (QUuid::fromString(searchId).isNull() || (kind != QLatin1String("torrents") && kind != QLatin1String("files")))
+        return;
+    handleSearchRequest(peerId, data, kind == QLatin1String("files"), searchId);
+}
+
+void PeerApi::handleSearchRequest(const QString& peerId, const QJsonObject& data, bool files, const QString& searchId)
 {
     service::SearchService::Request req = parseSearchRequest(data);
-    if (req.query.length() <= 2)
+    if (!searchId.isEmpty()) {
+        if (!service::SearchService::queryError(req.query, true).isEmpty())
+            return;
+        req.fuzzy = data["fuzzy"].toBool();
+    } else if (!service::SearchService::canSendLegacyQuery(req.query)) {
         return;
-
-    const QVector<domain::SearchHit> hits = app_->search()->searchFiles(req);
-    qInfo() << "[PeerApi] searchFiles" << req.query << "->" << hits.size() << "results for" << shortId(peerId);
-
-    for (const domain::SearchHit& hit : hits) {
-        QJsonObject result = domain::codec::toJson(hit);
-        // Legacy peers read matching file paths from the "path" key.
-        if (!hit.matchingPaths.isEmpty()) {
-            QJsonArray paths;
-            for (const QString& p : hit.matchingPaths)
-                paths.append(p);
-            result["path"] = paths;
-        }
-        app_->transport()->sendMessage(peerId, "searchFiles_response", result);
     }
+
+    using service::SearchService;
+    req.limit = qBound(1, req.limit, 50);
+    req.offset = qMax(0, req.offset);
+    app_->search()->searchAsync(this, req, files ? SearchService::Mode::Files : SearchService::Mode::Torrents,
+        SearchService::Lane::Peer, [this, peerId, searchId, files](SearchService::Results found) {
+            auto* transport = app_->transport();
+            const auto& hits = files ? found.files : found.torrents;
+            for (const domain::SearchHit& hit : hits) {
+                if (!searchId.isEmpty()) {
+                    transport->sendMessage(peerId, searchV2Response, { { "searchId", searchId },
+                        { "kind", files ? QStringLiteral("files") : QStringLiteral("torrents") },
+                        { "hit", domain::codec::toJson(hit) } });
+                } else if (files) {
+                    QJsonObject result = domain::codec::toJson(hit);
+                    if (!hit.matchingPaths.isEmpty())
+                        result["path"] = QJsonArray::fromStringList(hit.matchingPaths);
+                    transport->sendMessage(peerId, QStringLiteral("searchFiles_response"), result);
+                } else {
+                    transport->sendMessage(peerId, QStringLiteral("searchTorrent_response"), domain::codec::toJson(hit.torrent));
+                }
+            }
+        });
 }
 
 void PeerApi::handleTopTorrentsRequest(const QString& peerId, const QJsonObject& data)
@@ -195,13 +312,12 @@ void PeerApi::handleTorrentRequest(const QString& peerId, const QJsonObject& dat
     else
         includeFiles = data["files"].toBool(false);
 
-    const std::optional<domain::Torrent> torrent = app_->search()->get(hash, includeFiles);
-    if (!torrent || !torrent->isValid())
-        return; // not found: the wire protocol has no "miss" reply, so stay silent
-
-    qInfo() << "[PeerApi] torrent" << hash.left(8) << "for" << shortId(peerId);
-    app_->transport()->sendMessage(peerId, "torrent_response",
-        domain::codec::toJson(*torrent, { /*includeFiles*/ includeFiles, /*includeInfo*/ true }));
+    app_->search()->getAsync(this, hash, includeFiles, service::SearchService::Lane::Peer,
+        [this, peerId, includeFiles](std::optional<domain::Torrent> torrent) {
+            if (torrent && torrent->isValid())
+                app_->transport()->sendMessage(peerId, "torrent_response",
+                    domain::codec::toJson(*torrent, { /*includeFiles*/ includeFiles, /*includeInfo*/ true }));
+        });
 }
 
 void PeerApi::handleFeedRequest(const QString& peerId, const QJsonObject& data)
@@ -263,39 +379,37 @@ void PeerApi::handleDatabaseCancel(const QString& peerId, const QJsonObject& dat
 // Responses we consume
 // ============================================================================
 
-void PeerApi::handleSearchResult(const QString& peerId, const QJsonObject& data)
+void PeerApi::handleVersionedSearchResult(const QString& peerId, const QJsonObject& data)
 {
-    QString hash = data["hash"].toString();
-    if (hash.isEmpty())
-        hash = data["info_hash"].toString();
-    if (hash.isEmpty())
+    const QString searchId = data["searchId"].toString();
+    if (searchId.isEmpty() || searchId != activeSearchId_ || !versionedSearchPeers_.contains(peerId))
         return;
-
-    // Surface the hit to the UI with remote provenance stamped on. Search hits
-    // are deliberately NOT indexed here: the reply carries metadata only (no file
-    // list), so storing it would leave a file-less torrent in the database. A
-    // remote hit is cloned in full — with its files — only when the user opens it
-    // and we fetch it via requestTorrent()/torrent_response.
-    QJsonObject result = data;
-    result["remote"] = true;
-    result["peer"] = peerId;
-    emit remoteSearchResults(QString(), QJsonArray { result });
+    const QString kind = data["kind"].toString();
+    if (kind != QLatin1String("torrents") && kind != QLatin1String("files"))
+        return;
+    emitSearchHit(peerId, searchId, data["hit"].toObject(), kind == QLatin1String("files"));
 }
 
-void PeerApi::handleSearchFilesResult(const QString& peerId, const QJsonObject& data)
+void PeerApi::emitSearchHit(const QString& peerId, const QString& searchId, QJsonObject hit, bool files)
 {
-    const QString query = data["text"].toString();
-
-    QJsonObject item = data;
-    item["isFileMatch"] = true;
-    item["remote"] = true;
-    item["peer"] = peerId;
-    // Normalise legacy "path" onto "matchingPaths" for consistent consumers.
-    if (data.contains("path"))
-        item["matchingPaths"] = data["path"];
-
-    emit remoteFileSearchResults(query, QJsonArray { item });
-    qInfo() << "[PeerApi] file search result from" << shortId(peerId) << "for" << query;
+    QString hash = hit["hash"].toString();
+    if (hash.isEmpty())
+        hash = hit["info_hash"].toString();
+    if (!infohash::isValid(hash))
+        return;
+    hit["hash"] = infohash::normalize(hash);
+    // Search hits carry summary data. Opening the torrent fetches its full file
+    // list via requestTorrent() before it can be indexed locally.
+    hit["remote"] = true;
+    hit["peer"] = peerId;
+    if (files) {
+        hit["fileMatch"] = true;
+        if (!hit.contains("matchingPaths") && hit.contains("path"))
+            hit["matchingPaths"] = hit["path"];
+        emit remoteFileSearchResults(searchId, QJsonArray{ hit });
+    } else {
+        emit remoteSearchResults(searchId, QJsonArray{ hit });
+    }
 }
 
 void PeerApi::handleTorrentResponse(const QString& peerId, const QJsonObject& data)
@@ -315,7 +429,7 @@ void PeerApi::handleTorrentResponse(const QString& peerId, const QJsonObject& da
     payload["remote"] = true;
     emit remoteTorrentReceived(hash, payload);
 
-    insertFromPeer(data, /*trackReplication*/ true);
+    queueIndexing({ data }, /*trackReplication*/ true);
 }
 
 void PeerApi::handleFeedResponse(const QString& peerId, const QJsonObject& data)
@@ -336,27 +450,26 @@ void PeerApi::handleFeedResponse(const QString& peerId, const QJsonObject& data)
     if (!replace)
         return;
 
-    qInfo() << "[PeerApi] replacing feed with" << remoteFeed.size() << "items from" << shortId(peerId);
-    feed->fromJsonArray(remoteFeed, remoteFeedDate);
-
-    // Replicate the torrents behind the feed into the index. These deliberately
-    // do not count toward replication accounting.
-    for (const QJsonValue& v : remoteFeed) {
-        if (v.isObject())
-            insertFromPeer(v.toObject(), /*trackReplication*/ false);
+    const auto replaceFeed = [feed, remoteFeed, remoteSize, remoteFeedDate, peerId](int) {
+        if (remoteSize > feed->size() || (remoteSize == feed->size() && remoteFeedDate > feed->feedDate())) {
+            qInfo() << "[PeerApi] replacing feed with" << remoteFeed.size() << "items from" << shortId(peerId);
+            feed->fromJsonArray(remoteFeed, remoteFeedDate);
+        }
+    };
+    if (remoteFeed.isEmpty()) {
+        replaceFeed(0);
+    } else {
+        queueIndexing(remoteFeed, /*trackReplication*/ false, replaceFeed);
     }
 }
 
 void PeerApi::handleRandomTorrentsResponse(const QString& peerId, const QJsonObject& data)
 {
     const QJsonArray torrents = data["torrents"].toArray();
-    int inserted = 0;
-    for (const QJsonValue& v : torrents) {
-        if (v.isObject() && insertFromPeer(v.toObject(), /*trackReplication*/ true))
-            ++inserted;
-    }
-    if (inserted > 0)
-        qInfo() << "[PeerApi] replicated" << inserted << "torrents from" << shortId(peerId);
+    queueIndexing(torrents, /*trackReplication*/ true, [peerId](int inserted) {
+        if (inserted > 0)
+            qInfo() << "[PeerApi] replicated" << inserted << "torrents from" << shortId(peerId);
+    });
 }
 
 void PeerApi::handleDatabaseResponse(const QString& peerId, const QJsonObject& data)
@@ -381,7 +494,7 @@ void PeerApi::handleTorrentAnnounce(const QString& peerId, const QJsonObject& da
         return;
 
     qDebug() << "[PeerApi] torrent announce from" << shortId(peerId) << ":" << name;
-    insertFromPeer(data, /*trackReplication*/ false);
+    queueIndexing({ data }, /*trackReplication*/ false);
 }
 
 // ============================================================================

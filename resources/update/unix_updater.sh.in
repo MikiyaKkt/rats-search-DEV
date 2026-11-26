@@ -1,5 +1,5 @@
 #!/bin/bash
-echo 'Rats Search Updater'
+echo 'Rats Search Adv Updater'
 echo '==================='
 echo
 echo 'Waiting for application to close...'

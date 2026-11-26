@@ -168,7 +168,7 @@ bool AutoStartManager::enable()
     QTextStream out(&file);
     out << "[Desktop Entry]\n"
         << "Type=Application\n"
-        << "Name=Rats Search\n"
+        << "Name=Rats Search Adv\n"
         << "Comment=BitTorrent P2P Search Engine\n"
         << "Exec=" << appPath() << "\n"
         << "Icon=ratssearch\n"

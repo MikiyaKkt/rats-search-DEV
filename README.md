@@ -1,10 +1,10 @@
-# Rats on The Boat - BitTorrent Search Engine
+# Rats Search Adv - BitTorrent Search Engine
 
-<p align="center"><a href="https://github.com/DEgITx/rats-search"><img src="https://raw.githubusercontent.com/DEgITx/rats-search/master/resources/rat-logo.png"></a></p>
+<p align="center"><a href="https://github.com/MikiyaKkt/rats-search-DEV"><img src="https://raw.githubusercontent.com/DEgITx/rats-search/master/resources/rat-logo.png"></a></p>
 
-[![GitHub Actions Build](https://github.com/DEgITx/rats-search/actions/workflows/build.yml/badge.svg)](https://github.com/DEgITx/rats-search/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/release/DEgITx/rats-search.svg)](https://github.com/DEgITx/rats-search/releases)
-[![Documentation](https://img.shields.io/badge/docs-faq-brightgreen.svg)](https://github.com/DEgITx/rats-search/blob/master/docs/MANUAL.md)
+[![GitHub Actions Build](https://github.com/MikiyaKkt/rats-search-DEV/actions/workflows/build.yml/badge.svg)](https://github.com/MikiyaKkt/rats-search-DEV/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/release/MikiyaKkt/rats-search-DEV.svg)](https://github.com/MikiyaKkt/rats-search-DEV/releases)
+[![Documentation](https://img.shields.io/badge/docs-faq-brightgreen.svg)](https://github.com/MikiyaKkt/rats-search-DEV/blob/master/docs/MANUAL.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A high-performance BitTorrent search program for desktop and server. It collects and indexes torrents from the DHT network, allowing powerful full-text search through torrent statistics and categories. Works over an encrypted P2P network and supports Windows, Linux, and macOS platforms.
@@ -59,7 +59,7 @@ A high-performance BitTorrent search program for desktop and server. It collects
 
 ![Basic Architecture](docs/img/ratsarch.png)
 
-Rats Search is built on **[librats](https://github.com/DEgITx/librats)** — a high-performance P2P networking library providing:
+Rats Search Adv is built on **[librats](https://github.com/DEgITx/librats)** — a high-performance P2P networking library providing:
 
 | Feature | Description |
 |---------|-------------|
@@ -72,14 +72,13 @@ Rats Search is built on **[librats](https://github.com/DEgITx/librats)** — a h
 
 ## Download
 
-**[⬇️ Download the latest release](https://github.com/DEgITx/rats-search/releases)** for Windows, Linux, or macOS.
+**[⬇️ Download the latest release](https://github.com/MikiyaKkt/rats-search-DEV/releases)** for Windows, Linux, or macOS.
 
 | Platform | Package |
 |----------|---------|
-| Windows | `RatsSearch-Windows-x64.zip` |
-| Linux | `RatsSearch-Linux-x64.AppImage` or `.tar.gz` |
-| macOS Intel | `RatsSearch-macOS-Intel.zip` |
-| macOS ARM | `RatsSearch-macOS-ARM.zip` |
+| Windows x64 | `RatsSearch-Windows-x64-Adv-v1.2.0.zip` or the matching installer |
+| Linux x64 | `RatsSearch-Linux-x64-Adv-v1.2.0.AppImage` or `.tar.gz` |
+| macOS Apple Silicon | `RatsSearch-macOS-ARM-Adv-v1.2.0.dmg` |
 
 ## Building from Source
 
@@ -99,8 +98,8 @@ offline rebuilds, tests, and package output.
 Clone the repository with submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/DEgITx/rats-search.git
-cd rats-search
+git clone --recurse-submodules https://github.com/MikiyaKkt/rats-search-DEV.git
+cd rats-search-DEV
 ```
 
 Configure and build:
@@ -274,12 +273,12 @@ Subscribe to autor (GitHub donations): https://github.com/sponsors/DEgITx
 ## Contacts
 
 - [Discord Community](https://discord.gg/t9GQtxA)
-- [GitHub Issues](https://github.com/DEgITx/rats-search/issues)
+- [GitHub Issues](https://github.com/MikiyaKkt/rats-search-DEV/issues)
 - Twitter/X: [@RatsSearch](https://twitter.com/RatsSearch)
 
 ## License
 
-[MIT License](https://github.com/DEgITx/rats-search/blob/master/LICENSE) © 2026
+[MIT License](https://github.com/MikiyaKkt/rats-search-DEV/blob/master/LICENSE) © 2026
 
 ## Download settings validation build
 

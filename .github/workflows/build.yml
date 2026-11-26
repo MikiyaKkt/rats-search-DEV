@@ -1,4 +1,4 @@
-name: Build Rats Search
+name: Build Rats Search Adv
 
 on:
   push:
@@ -182,7 +182,7 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
           $packageDir = "RatsSearch-Windows-x64"
-          $zipName = "RatsSearch-Windows-x64-${version}.zip"
+          $zipName = "RatsSearch-Windows-x64-Adv-${version}.zip"
           
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
           
@@ -349,7 +349,7 @@ jobs:
       - name: Create DMG
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DMG_NAME="RatsSearch-macOS-Intel-${VERSION}.dmg"
+          DMG_NAME="RatsSearch-macOS-Intel-Adv-${VERSION}.dmg"
           
           # Create a temporary directory for DMG contents
           mkdir -p dmg-contents
@@ -358,7 +358,7 @@ jobs:
           
           # Create DMG
           hdiutil create \
-            -volname "Rats Search" \
+            -volname "Rats Search Adv" \
             -srcfolder dmg-contents \
             -ov \
             -format UDZO \
@@ -502,7 +502,7 @@ jobs:
       - name: Create DMG
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DMG_NAME="RatsSearch-macOS-ARM-${VERSION}.dmg"
+          DMG_NAME="RatsSearch-macOS-ARM-Adv-${VERSION}.dmg"
           
           # Create a temporary directory for DMG contents
           mkdir -p dmg-contents
@@ -511,7 +511,7 @@ jobs:
           
           # Create DMG
           hdiutil create \
-            -volname "Rats Search" \
+            -volname "Rats Search Adv" \
             -srcfolder dmg-contents \
             -ov \
             -format UDZO \
@@ -681,7 +681,7 @@ jobs:
           printf '%s\n' \
             '[Desktop Entry]' \
             'Type=Application' \
-            'Name=Rats Search' \
+            'Name=Rats Search Adv' \
             'Exec=RatsSearch' \
             'Icon=ratssearch' \
             'Categories=Network;P2P;' \
@@ -696,14 +696,14 @@ jobs:
           ln -sf usr/share/icons/hicolor/512x512/apps/ratssearch.png AppDir/ratssearch.png
           
           # Run linuxdeploy with Qt plugin
-          OUTPUT="RatsSearch-Linux-x64-${VERSION}.AppImage" \
+          OUTPUT="RatsSearch-Linux-x64-Adv-${VERSION}.AppImage" \
             ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --plugin qt \
             --output appimage || APPIMAGE_FAILED=1
           
           # If AppImage creation failed, create a tar.gz instead
-          if [ "${APPIMAGE_FAILED:-0}" = "1" ] || [ ! -f "RatsSearch-Linux-x64-${VERSION}.AppImage" ]; then
+          if [ "${APPIMAGE_FAILED:-0}" = "1" ] || [ ! -f "RatsSearch-Linux-x64-Adv-${VERSION}.AppImage" ]; then
             echo "AppImage creation failed, creating tar.gz package instead"
             mkdir -p RatsSearch-Linux-x64
             cp -r build/bin/* RatsSearch-Linux-x64/
@@ -803,7 +803,7 @@ jobs:
             echo "Package contents:"
             find RatsSearch-Linux-x64 -type f | head -50
             
-            tar -czvf "RatsSearch-Linux-x64-${VERSION}.tar.gz" RatsSearch-Linux-x64
+            tar -czvf "RatsSearch-Linux-x64-Adv-${VERSION}.tar.gz" RatsSearch-Linux-x64
           fi
 
       - name: Upload artifact (AppImage)
@@ -838,6 +838,7 @@ jobs:
           persist-credentials: false
 
       - name: Generate changelog for release
+        if: github.ref_name != 'v1.2.0'
         id: changelog
         uses: orhun/git-cliff-action@v4
         with:
@@ -846,6 +847,12 @@ jobs:
         env:
           OUTPUT: CHANGES.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read v1.2.0 release notes
+        if: github.ref_name == 'v1.2.0'
+        run: |
+          awk '/^## \[1\.2\.0\] / { section = 1; next } /^## / { if (section) exit } section' CHANGELOG.md > CHANGES.md
+          test -s CHANGES.md
 
       - name: Download all artifacts
         uses: actions/download-artifact@v7
@@ -858,6 +865,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          name: Rats Search Adv ${{ github.ref_name }}
+          make_latest: ${{ !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'rc') }}
           files: |
             artifacts/**/*.zip
             artifacts/**/*.exe
@@ -866,6 +875,6 @@ jobs:
             artifacts/**/*.tar.gz
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-          body: ${{ steps.changelog.outputs.content }}
+          body_path: CHANGES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

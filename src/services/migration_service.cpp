@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutexLocker>
+#include <QSaveFile>
 #include <QThread>
 #include <QTimer>
 #include <QVersionNumber>
@@ -23,6 +24,11 @@
 #include <QScopeGuard>
 
 namespace rats::service {
+
+namespace {
+const QString searchMigrationId = QStringLiteral("search_reindex_ngram_v1");
+const QStringList searchTables{ QStringLiteral("torrents"), QStringLiteral("files") };
+}
 
 // ============================================================================
 // Construction
@@ -50,17 +56,17 @@ MigrationService::MigrationService(const QString& dataDirectory, data::Database*
     loadState();
     registerMigrations();
 
-    // Detect a fresh install: no migration state file means there is no upgraded
-    // data to migrate, so mark every known migration as completed up front.
+    // Legacy tasks use the state file to identify a new install. Search
+    // reindexing checks the actual tables because a copied index may lack it.
     const bool hasStateFile = QFile::exists(stateFilePath_);
     if (!hasStateFile) {
         isFreshInstall_ = true;
-        qInfo() << "[Migration] Fresh install detected, skipping all migrations";
+        qInfo() << "[Migration] No previous state, skipping legacy migrations";
 
         {
             QMutexLocker locker(&stateMutex_);
             for (const auto& migration : registeredMigrations_) {
-                if (!completedMigrations_.contains(migration.id)) {
+                if (!migration.checkOnFreshInstall && !completedMigrations_.contains(migration.id)) {
                     completedMigrations_.append(migration.id);
                 }
             }
@@ -187,6 +193,17 @@ void MigrationService::registerMigrations()
         [this] { return syncUpdateWalkInterval(); },
         nullptr,
     });
+
+    registeredMigrations_.append({
+        searchMigrationId,
+        "",
+        "",
+        tr("Rebuilding the search index"),
+        true,
+        [this] { return syncReindexSearch(); },
+        nullptr,
+        true,
+    });
 }
 
 // ============================================================================
@@ -232,12 +249,20 @@ void MigrationService::loadState()
     }
 
     lastVersion_ = stateJson["lastVersion"].toString();
+    const auto searchState = stateJson["searchReindex"].toObject();
+    for (const QString& table : searchTables) {
+        const auto row = searchState.value(table).toObject();
+        if (!row.isEmpty()) {
+            searchCheckpoints_.insert(table,
+                { row["afterId"].toString().toLongLong(), row["rows"].toInteger(), row["complete"].toBool() });
+        }
+    }
 
     qInfo() << "[Migration] state loaded, last version:" << lastVersion_ << "completed:" << completedMigrations_.size()
             << "in-progress:" << inProgressMigration_.migrationId;
 }
 
-void MigrationService::saveState()
+bool MigrationService::saveState()
 {
     QMutexLocker locker(&stateMutex_);
 
@@ -262,15 +287,21 @@ void MigrationService::saveState()
 
     state["lastVersion"] = RATSSEARCH_VERSION_STRING;
     state["savedAt"] = QDateTime::currentMSecsSinceEpoch();
-
-    QFile file(stateFilePath_);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        const QJsonDocument doc(state);
-        file.write(doc.toJson(QJsonDocument::Indented));
-        file.close();
-    } else {
-        qWarning() << "[Migration] failed to save state:" << file.errorString();
+    if (!searchCheckpoints_.isEmpty()) {
+        QJsonObject searchState;
+        for (auto it = searchCheckpoints_.cbegin(); it != searchCheckpoints_.cend(); ++it) {
+            searchState[it.key()] = QJsonObject{ { "afterId", QString::number(it->afterId) },
+                { "rows", it->rows }, { "complete", it->complete } };
+        }
+        state["searchReindex"] = searchState;
     }
+
+    QSaveFile file(stateFilePath_);
+    const QByteArray json = QJsonDocument(state).toJson(QJsonDocument::Indented);
+    if (file.open(QIODevice::WriteOnly) && file.write(json) == json.size() && file.commit())
+        return true;
+    qWarning() << "[Migration] failed to save state:" << file.errorString();
+    return false;
 }
 
 bool MigrationService::isMigrationCompleted(const QString& migrationId) const
@@ -290,6 +321,8 @@ void MigrationService::markMigrationCompleted(const QString& migrationId)
         if (inProgressMigration_.migrationId == migrationId) {
             inProgressMigration_ = MigrationState();
         }
+        if (migrationId == searchMigrationId)
+            searchCheckpoints_.clear();
     }
 
     saveState();
@@ -302,10 +335,7 @@ void MigrationService::markMigrationCompleted(const QString& migrationId)
 
 bool MigrationService::runSyncMigrations()
 {
-    if (isFreshInstall_) {
-        qInfo() << "[Migration] fresh install - skipping sync migrations";
-        return true;
-    }
+    stopRequested_.store(false);
 
     qInfo() << "[Migration] running synchronous migrations...";
 
@@ -366,6 +396,11 @@ bool MigrationService::runSyncMigrations()
         qInfo() << "[Migration] all sync migrations completed successfully";
     }
     return allSuccess;
+}
+
+bool MigrationService::searchIndexReady() const
+{
+    return isMigrationCompleted(searchMigrationId);
 }
 
 void MigrationService::reportProgress(const QString& migrationId, qint64 current, qint64 total)
@@ -495,6 +530,66 @@ bool MigrationService::syncDeriveRowIds()
     // this ran.
     repository_->primeFromDatabase();
     return true;
+}
+
+bool MigrationService::syncReindexSearch()
+{
+    if (!db_ || !repository_)
+        return false;
+
+    const QString probe = QStringLiteral("\u7535\u5f71");
+    qint64 total = 0;
+    qint64 processed = 0;
+    for (const QString& table : searchTables) {
+        // The running table may retain the previous tokenizer from its RT
+        // header. Reconfigure before touching any rows, then verify both tables.
+        if (!db_->execute(QStringLiteral("ALTER TABLE %1 RECONFIGURE").arg(table)))
+            return false;
+        bool ok = false;
+        const auto tokens = db_->query(QStringLiteral("CALL KEYWORDS(?, ?)"), { probe, table }, &ok);
+        if (!ok || tokens.size() != 2 || tokens[0].value("normalized").toString() != probe.left(1)
+            || tokens[1].value("normalized").toString() != probe.right(1)) {
+            qWarning() << "[Migration] search tokenizer did not load for" << table;
+            return false;
+        }
+        const auto count = db_->query(QStringLiteral("SELECT count(*) AS total FROM %1").arg(table), {}, &ok);
+        if (!ok || count.isEmpty())
+            return false;
+        total += count.front().value("total").toLongLong();
+        QMutexLocker locker(&stateMutex_);
+        processed += searchCheckpoints_.value(table).rows;
+    }
+
+    reportProgress(searchMigrationId, qMin(total, processed), total);
+    constexpr int batchSize = 500;
+    for (const QString& table : searchTables) {
+        SearchCheckpoint checkpoint;
+        {
+            QMutexLocker locker(&stateMutex_);
+            checkpoint = searchCheckpoints_.value(table);
+        }
+        while (!checkpoint.complete) {
+            if (stopRequested_.load())
+                return false;
+            const auto page = repository_->reindexSearchPage(table, checkpoint.afterId, batchSize);
+            if (!page) {
+                qWarning() << "[Migration] search reindex failed for" << table << "after row" << checkpoint.afterId;
+                return false;
+            }
+            checkpoint.afterId = page->lastId;
+            checkpoint.rows += page->rows;
+            checkpoint.complete = page->rows == 0;
+            {
+                QMutexLocker locker(&stateMutex_);
+                searchCheckpoints_[table] = checkpoint;
+            }
+            if (!saveState())
+                return false;
+            processed += page->rows;
+            reportProgress(searchMigrationId, qMin(total, processed), total);
+        }
+    }
+    return !stopRequested_.load();
 }
 
 bool MigrationService::syncUpdateWalkInterval()
@@ -648,6 +743,7 @@ void MigrationService::requestStop()
 
 void MigrationService::shutdown()
 {
+    stopRequested_.store(true);
     requestStop();
     if (asyncFuture_.isRunning()) asyncFuture_.waitForFinished();
     ++generation_;

@@ -9,6 +9,65 @@
 
 ## Documentation
 
+### Searching torrents and files
+
+Enter `电影` to find a continuous Chinese term. Separate conditions with spaces
+to require each one in any order, as in `电影 1080p`. Enclose a phrase in straight
+or curly double quotes to require adjacent words in order, as in `"Ubuntu Linux"`.
+An asterisk outside quotes supports title prefixes, as in `ubun*`. File search
+matches all conditions on one file path. Its results highlight that path.
+
+Enable **Fuzzy** to supplement ordinary results with one-character corrections
+such as `ubntu` → `ubuntu`. It is off when the app starts. Fuzzy results are
+marked and appear after ordinary results. Quotes, wildcards and Info Hash lookups
+keep their original matching rules.
+
+Desktop search also asks connected Rats peers. Peers that advertise advanced
+search can answer short continuous terms, phrases and fuzzy requests. A new
+search, filter or sort gets a new request ID. Desktop search sends requests
+only to peers that support this ID and accepts results only for its current
+request. The app can still answer compatible ordinary searches from older
+clients. [Search API](API.md#search)
+
+The first start after upgrading an older index may show search-index rebuilding
+progress. If the app is interrupted, the next start resumes from the last saved
+batch.
+
+### Organizing and exporting Favorites
+
+Use Ctrl (Command on macOS) or Shift to select several search results, then use
+**Add selected to Favorites**. Choose a destination if folders have been
+created. The **Hide favorited torrents** checkbox updates the current results
+when a favorite is added or removed.
+
+In the Favorites tab, use **Manage folders** to create, rename or delete
+folders. Select **All favorites**, **Unfiled** or a folder with the selector.
+Use **Move selected** or **Remove selected** to apply an action to several
+rows. Deleting a folder moves its favorites to **Unfiled**.
+
+The **Export favorites** menu can save selected rows, the current folder or
+all favorites to a UTF-8 JSON file or an Excel workbook (`.xlsx`). Each entry
+contains a title, magnet link, info hash and folder. You can include the date
+added to Favorites and the file list. Excel puts file paths and sizes on a
+second sheet, linked to the Favorites sheet by info hash. If the full file
+list is unavailable locally, Excel marks it as unavailable and JSON stores
+`"files": null`.
+
+### Moving the data directory
+
+Open **Settings → Storage → Data Directory**, choose an empty destination,
+leave **Migrate current data on restart** checked and save. Exit the app and
+start it again. At startup it copies the
+database, database journal, favorites, settings and other persistent profile
+data. Once the database opens at the destination, the app saves its new
+location. The original data remains available as a backup. Downloaded files
+stay at their configured save paths. Existing logs and caches stay in the
+source directory. The bundled application logger may not produce
+`rats-search.log` under a Unicode Windows path.
+If you cancel the copy or the copy fails, the original directory stays active.
+If the copied database fails to open, the following launch uses the original
+directory. Clear the checkbox to switch directly to another existing profile.
+
 ### Crawler concurrency
 
 In Settings → Indexer → Spider Performance, **Metadata concurrency limit** controls
@@ -78,4 +137,4 @@ Task settings now offer rarest-first, sequential or selected-file first/last-pie
 
 Global download settings offer an opt-in shared read cache (MiB), weekly bandwidth intervals with an IANA time zone, and default seeding ratio/time conditions. Schedule caps intersect with existing limits. Reaching a seeding goal keeps files and releases its slot; Restart seeding after goal starts a new accounting interval. Pause and queue time do not count as active seeding time.
 
-Use the [S3 validation checklist](DOWNLOAD_S3_VALIDATION.md) and [implementation report](DOWNLOAD_S3_REPORT.md). For isolated portable runs use an ASCII database path and `--data-dir E:\RatsS3Test\data --no-remember-data-dir`. The bundled third-party database currently fails the Chinese data-directory startup smoke; Chinese payload names and download directories are tested separately and supported.
+Use the [S3 validation checklist](DOWNLOAD_S3_VALIDATION.md) and [implementation report](DOWNLOAD_S3_REPORT.md). For isolated portable runs pass `--data-dir E:\RatsS3Test\data --no-remember-data-dir`. Windows migration and restart were also verified with a Chinese data-directory name.

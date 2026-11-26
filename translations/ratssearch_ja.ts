@@ -334,8 +334,8 @@ or they will be added automatically when you create or import a torrent.</source
     <name>MainWindow</name>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="118"/>
-        <source>Rats Search %1 - BitTorrent P2P Search Engine</source>
-        <translation>Rats Search %1 - BitTorrent P2P 検索エンジン</translation>
+        <source>Rats Search Adv %1 - BitTorrent P2P Search Engine</source>
+        <translation>Rats Search Adv %1 - BitTorrent P2P 検索エンジン</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="203"/>
@@ -729,8 +729,8 @@ or they will be added automatically when you create or import a torrent.</source
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
         <location filename="../src/ui/mainwindow.cpp" line="2049"/>
-        <source>Rats Search</source>
-        <translation>Rats Search</translation>
+        <source>Rats Search Adv</source>
+        <translation>Rats Search Adv</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="929"/>
@@ -744,8 +744,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="939"/>
-        <source>Are you sure you want to exit Rats Search?</source>
-        <translation>Rats Search を終了してもよろしいですか?</translation>
+        <source>Are you sure you want to exit Rats Search Adv?</source>
+        <translation>Rats Search Adv を終了してもよろしいですか?</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1000"/>
@@ -950,8 +950,8 @@ or they will be added automatically when you create or import a torrent.</source
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1472"/>
-        <source>About Rats Search</source>
-        <translation>Rats Search について</translation>
+        <source>About Rats Search Adv</source>
+        <translation>Rats Search Adv について</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1490"/>
@@ -996,8 +996,8 @@ DHT クロールと全文検索を備えた
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1570"/>
-        <source>Recent changes and updates to Rats Search</source>
-        <translation>Rats Search の最近の変更と更新</translation>
+        <source>Recent changes and updates to Rats Search Adv</source>
+        <translation>Rats Search Adv の最近の変更と更新</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1599"/>
@@ -1106,8 +1106,8 @@ No changelog available.</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1718"/>
-        <source>Created with Rats Search</source>
-        <translation>Rats Search で作成</translation>
+        <source>Created with Rats Search Adv</source>
+        <translation>Rats Search Adv で作成</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1721"/>
@@ -1280,8 +1280,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1962"/>
-        <source>Rats Search - P2P Torrent Search Engine</source>
-        <translation>Rats Search - P2P トレント検索エンジン</translation>
+        <source>Rats Search Adv - P2P Torrent Search Engine</source>
+        <translation>Rats Search Adv - P2P トレント検索エンジン</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="1967"/>
@@ -1315,8 +1315,8 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2102"/>
-        <source>You are running the latest version of Rats Search (%1).</source>
-        <translation>最新バージョンの Rats Search (%1) を使用しています。</translation>
+        <source>You are running the latest version of Rats Search Adv (%1).</source>
+        <translation>最新バージョンの Rats Search Adv (%1) を使用しています。</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2118"/>
@@ -1330,11 +1330,11 @@ Sharing is something each user enables for themselves, and older clients do not 
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2130"/>
-        <source>A new version of Rats Search is available.
+        <source>A new version of Rats Search Adv is available.
 
 Current version: %1
 New version: %2</source>
-        <translation>Rats Search の新しいバージョンが利用可能です。
+        <translation>Rats Search Adv の新しいバージョンが利用可能です。
 
 現在のバージョン: %1
 新しいバージョン: %2</translation>
@@ -1429,8 +1429,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2350"/>
-        <source>Rats Search - License Agreement</source>
-        <translation>Rats Search - ライセンス契約</translation>
+        <source>Rats Search Adv - License Agreement</source>
+        <translation>Rats Search Adv - ライセンス契約</translation>
     </message>
     <message>
         <location filename="../src/ui/mainwindow.cpp" line="2356"/>
@@ -1523,8 +1523,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="45"/>
-        <source>Rats Search Settings</source>
-        <translation>Rats Search の設定</translation>
+        <source>Rats Search Adv Settings</source>
+        <translation>Rats Search Adv の設定</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="51"/>
@@ -1578,8 +1578,8 @@ Do you want to install the update now?</source>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="158"/>
-        <source>Automatically start Rats Search when you log in to your computer</source>
-        <translation>コンピューターにログインしたときに Rats Search を自動的に起動します</translation>
+        <source>Automatically start Rats Search Adv when you log in to your computer</source>
+        <translation>コンピューターにログインしたときに Rats Search Adv を自動的に起動します</translation>
     </message>
     <message>
         <location filename="../src/ui/settingsdialog.cpp" line="161"/>

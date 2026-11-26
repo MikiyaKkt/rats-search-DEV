@@ -89,6 +89,11 @@ QString SingleInstanceGuard::runningInstanceInfo() const
     return info;
 }
 
+bool SingleInstanceGuard::holdsLock() const
+{
+    return lockFile_->isLocked();
+}
+
 bool SingleInstanceGuard::notifyRunningInstance(int timeoutMs)
 {
 #ifdef _WIN32
@@ -124,7 +129,7 @@ void SingleInstanceGuard::startActivationServer()
             connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
             socket->waitForReadyRead(500);
             if (socket->readAll().startsWith("activate")) {
-                qInfo() << "Another Rats Search instance was started - raising this one";
+                qInfo() << "Another Rats Search Adv instance was started - raising this one";
                 emit secondInstanceStarted();
             }
             socket->disconnectFromServer();

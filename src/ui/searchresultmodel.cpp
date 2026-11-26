@@ -1,9 +1,11 @@
 #include "searchresultmodel.h"
+#include "app/favorites_store.h"
 #include "domain/content.h"
 #include "format.h"
 #include <QDateTime>
 #include <QHash>
 #include <QPair>
+#include <QSet>
 #include <algorithm>
 
 using rats::domain::SearchHit;
@@ -41,7 +43,7 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case NameColumn:
-            return torrent.name;
+            return hit.fuzzy ? tr("[Fuzzy] %1").arg(torrent.name) : torrent.name;
         case SizeColumn:
             return rats::ui::formatSize(torrent.size);
         case SeedersColumn:
@@ -76,6 +78,8 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
                 + (hit.sourcePeerId.isEmpty() ? tr("Not indexed locally — found on a remote peer")
                                               : tr("Not indexed locally — from peer %1").arg(hit.sourcePeerId.left(8)));
         }
+        if (hit.fuzzy)
+            tip += u'\n' + tr("Fuzzy match");
         return tip;
     }
     // Custom roles for delegate
@@ -87,6 +91,8 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
         return hit.matchingPaths;
     } else if (role == RemoteRole) {
         return hit.remote;
+    } else if (role == HashRole) {
+        return torrent.hash;
     }
 
     return QVariant();
@@ -118,37 +124,88 @@ void SearchResultModel::setResults(const QVector<SearchHit>& results)
 {
     beginResetModel();
     results_ = results;
+    rowByHash_.clear();
+    for (int row = 0; row < results_.size(); ++row) {
+        if (!rowByHash_.contains(results_[row].torrent.hash))
+            rowByHash_.insert(results_[row].torrent.hash, row);
+    }
     endResetModel();
     applyCurrentSort();
 }
 
 void SearchResultModel::addResult(const SearchHit& result)
 {
-    // Check for duplicates by hash
-    for (int i = 0; i < results_.size(); ++i) {
-        if (results_[i].torrent.hash == result.torrent.hash) {
-            // Same torrent from two sources: local wins. A peer usually answers
-            // after the local query has already filled the table, so without this
-            // the row would keep the "remote" tint for a torrent we do have.
-            if (results_[i].remote && !result.remote) {
-                results_[i].remote = false;
-                results_[i].sourcePeerId.clear();
-                emit dataChanged(index(i, 0), index(i, ColumnCount - 1), { RemoteRole, Qt::ToolTipRole });
+    addResults({ result });
+}
+
+namespace {
+bool mergeResult(SearchHit& current, const SearchHit& result)
+{
+    const bool promoted = current.fuzzy && !result.fuzzy;
+    bool changed = promoted;
+    if (promoted) {
+        current.fuzzy = false;
+        current.fromFileMatch = false;
+        current.matchingPaths.clear();
+    }
+    if (current.fuzzy == result.fuzzy) {
+        if (result.fromFileMatch && !current.fromFileMatch) {
+            current.fromFileMatch = true;
+            changed = true;
+        }
+        QSet<QString> known(current.matchingPaths.cbegin(), current.matchingPaths.cend());
+        for (const QString& path : result.matchingPaths) {
+            if (!known.contains(path)) {
+                known.insert(path);
+                current.matchingPaths.append(path);
+                changed = true;
             }
-            return; // Already exists
         }
     }
+    if (current.remote && !result.remote) {
+        current.torrent = result.torrent;
+        current.remote = false;
+        current.sourcePeerId.clear();
+        changed = true;
+    }
+    return changed;
+}
+} // namespace
 
-    beginInsertRows(QModelIndex(), results_.size(), results_.size());
-    results_.append(result);
-    endInsertRows();
-    applyCurrentSort();
+void SearchResultModel::addResults(const QVector<SearchHit>& results)
+{
+    QVector<SearchHit> inserted;
+    QSet<int> changed;
+    const int first = results_.size();
+    for (const auto& result : results) {
+        const auto& hash = result.torrent.hash;
+        const int row = rowByHash_.value(hash, -1);
+        if (row < 0) {
+            rowByHash_.insert(hash, first + inserted.size());
+            inserted.append(result);
+            continue;
+        }
+        if (row >= first)
+            mergeResult(inserted[row - first], result);
+        else if (mergeResult(results_[row], result))
+            changed.insert(row);
+    }
+    if (!inserted.isEmpty()) {
+        beginInsertRows({}, first, first + inserted.size() - 1);
+        results_.append(std::move(inserted));
+        endInsertRows();
+    }
+    for (int row : changed)
+        emit dataChanged(index(row, 0), index(row, ColumnCount - 1));
+    if (results_.size() != first || !changed.isEmpty())
+        applyCurrentSort();
 }
 
 void SearchResultModel::clearResults()
 {
     beginResetModel();
     results_.clear();
+    rowByHash_.clear();
     endResetModel();
 }
 
@@ -174,53 +231,12 @@ SearchHit SearchResultModel::getHit(int row) const
 
 void SearchResultModel::addFileResult(const SearchHit& result)
 {
-    mergeFileResultIntoExisting(result);
+    addResult(result);
 }
 
 void SearchResultModel::addFileResults(const QVector<SearchHit>& results)
 {
-    for (const SearchHit& result : results) {
-        mergeFileResultIntoExisting(result);
-    }
-}
-
-void SearchResultModel::mergeFileResultIntoExisting(const SearchHit& fileResult)
-{
-    // Check if this torrent already exists in results
-    for (int i = 0; i < results_.size(); ++i) {
-        if (results_[i].torrent.hash == fileResult.torrent.hash) {
-            // Merge the matching paths into existing result
-            for (const QString& path : fileResult.matchingPaths) {
-                if (!results_[i].matchingPaths.contains(path)) {
-                    results_[i].matchingPaths.append(path);
-                }
-            }
-            // Keep fromFileMatch if either is a file match
-            if (fileResult.fromFileMatch) {
-                results_[i].fromFileMatch = true;
-            }
-            // A local match for a row a peer answered first proves we do have the
-            // torrent, so the row stops being remote (see addResult()).
-            if (results_[i].remote && !fileResult.remote) {
-                results_[i].remote = false;
-                results_[i].sourcePeerId.clear();
-            }
-            // Emit dataChanged for all columns of this row, including
-            // Qt::SizeHintRole so the view recalculates the row height to accommodate
-            // the file paths
-            QModelIndex topLeft = index(i, 0);
-            QModelIndex bottomRight = index(i, ColumnCount - 1);
-            emit dataChanged(
-                topLeft, bottomRight, { MatchingPathsRole, RemoteRole, Qt::ToolTipRole, Qt::SizeHintRole });
-            return;
-        }
-    }
-
-    // Torrent doesn't exist, add as new result
-    beginInsertRows(QModelIndex(), results_.size(), results_.size());
-    results_.append(fileResult);
-    endInsertRows();
-    applyCurrentSort();
+    addResults(results);
 }
 
 void SearchResultModel::sort(int column, Qt::SortOrder order)
@@ -236,7 +252,8 @@ void SearchResultModel::sort(int column, Qt::SortOrder order)
 
 void SearchResultModel::applyCurrentSort()
 {
-    if (sortColumn_ < 0 || sortColumn_ >= ColumnCount || results_.isEmpty()) {
+    if (results_.isEmpty() || (sortColumn_ < 0
+            && std::none_of(results_.cbegin(), results_.cend(), [](const SearchHit& hit) { return hit.fuzzy; }))) {
         return;
     }
 
@@ -271,21 +288,21 @@ void SearchResultModel::applyCurrentSort()
         return false;
     };
 
-    if (order == Qt::AscendingOrder) {
-        std::stable_sort(results_.begin(), results_.end(), lessThan);
-    } else {
-        std::stable_sort(results_.begin(), results_.end(),
-            [&lessThan](const SearchHit& a, const SearchHit& b) { return lessThan(b, a); });
-    }
+    std::stable_sort(results_.begin(), results_.end(), [&](const SearchHit& a, const SearchHit& b) {
+        if (a.fuzzy != b.fuzzy)
+            return !a.fuzzy;
+        return order == Qt::AscendingOrder ? lessThan(a, b) : lessThan(b, a);
+    });
 
     // Rebuild a hash -> new row map to remap persistent indexes
-    QHash<QString, int> rowByHash;
-    rowByHash.reserve(results_.size());
+    rowByHash_.clear();
+    rowByHash_.reserve(results_.size());
     for (int i = 0; i < results_.size(); ++i) {
-        rowByHash.insert(results_[i].torrent.hash, i);
+        if (!rowByHash_.contains(results_[i].torrent.hash))
+            rowByHash_.insert(results_[i].torrent.hash, i);
     }
     for (const auto& pair : persistentByHash) {
-        const int newRow = rowByHash.value(pair.second, -1);
+        const int newRow = rowByHash_.value(pair.second, -1);
         if (newRow >= 0) {
             changePersistentIndex(pair.first, index(newRow, pair.first.column()));
         } else {
@@ -294,4 +311,44 @@ void SearchResultModel::applyCurrentSort()
     }
 
     emit layoutChanged();
+}
+
+SearchResultsFilter::SearchResultsFilter(rats::app::FavoritesStore* favorites, QObject* parent)
+    : QSortFilterProxyModel(parent), favorites_(favorites)
+{
+    if (favorites_)
+        connect(favorites_, &rats::app::FavoritesStore::favoritesChanged, this, [this] {
+            if (hideFavorites_)
+                updateFilter(hideFavorites_);
+        });
+}
+
+void SearchResultsFilter::setHideFavorites(bool enabled)
+{
+    if (hideFavorites_ != enabled)
+        updateFilter(enabled);
+}
+
+void SearchResultsFilter::sort(int column, Qt::SortOrder order)
+{
+    if (sourceModel())
+        sourceModel()->sort(column, order);
+}
+
+bool SearchResultsFilter::filterAcceptsRow(int row, const QModelIndex& parent) const
+{
+    return !hideFavorites_ || !favorites_
+        || !favorites_->isFavorite(sourceModel()->index(row, 0, parent).data(SearchResultModel::HashRole).toString());
+}
+
+void SearchResultsFilter::updateFilter(bool enabled)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+    hideFavorites_ = enabled;
+    endFilterChange(Direction::Rows);
+#else
+    hideFavorites_ = enabled;
+    invalidateRowsFilter();
+#endif
 }

@@ -28,6 +28,7 @@ public:
 
     explicit Manticore(const QString& dataDirectory, QObject* parent = nullptr);
     ~Manticore();
+    static bool hasLiveDaemon(const QString& dataDirectory);
 
     /**
      * @brief Start the Manticore Search daemon
@@ -107,6 +108,8 @@ private slots:
     void checkConnection();
 
 private:
+    bool useRelativeSearchdPaths() const;
+    QString searchdConfigArgument(QProcess& process) const;
     bool generateConfig();
     bool createDatabaseDirectories();
     QString findSearchdPath();

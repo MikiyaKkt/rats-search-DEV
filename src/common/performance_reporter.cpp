@@ -15,8 +15,10 @@ PerformanceReporter::PerformanceReporter(QObject* parent) : QObject(parent)
     connect(&summaryTimer_, &QTimer::timeout, this, [this] { report(); });
     connect(&lagTimer_, &QTimer::timeout, this, [this] {
         const auto now = PerformanceMetrics::nowNs();
-        PerformanceMetrics::instance().observe(QStringLiteral("main.event_loop_drift_ms"),
-            qMax(0.0, (now - previousTickNs_) / 1000000.0 - lagTimer_.interval()));
+        const double lag = qMax(0.0, (now - previousTickNs_) / 1000000.0 - lagTimer_.interval());
+        PerformanceMetrics::instance().observe(QStringLiteral("main.event_loop_drift_ms"), lag);
+        if (lag >= 500)
+            qWarning() << "[MainThread] event loop delayed" << qRound64(lag) << "ms";
         previousTickNs_ = now;
     });
 }

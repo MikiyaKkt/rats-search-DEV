@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] (2026-11-26)
+
+- The advanced edition is now **Rats Search Adv**. Existing data folders and settings carry forward from v1.1.0.
+- Search supports Chinese and other continuous scripts, quoted phrases, space-separated conditions and optional typo matching. File searches match terms on the same path.
+- Desktop, API and peer searches run in the background. Only current, correlated peer replies enter a desktop search.
+- Select multiple results to add favorites. Organize favorites in folders, hide them in search and export selected items, a folder or all favorites to JSON or Excel.
+- Move the database and profile from Storage settings. Restart to copy to an empty destination while keeping the original data as a backup.
+
 ## [2.3.6](https://github.com/DEgITx/rats-search/compare/v2.3.5...v2.3.6) (2026-11-02)
 
 

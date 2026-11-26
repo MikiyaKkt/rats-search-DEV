@@ -3,7 +3,13 @@
 
 #include "domain/torrent.h"
 #include <QAbstractTableModel>
+#include <QHash>
+#include <QSortFilterProxyModel>
 #include <QVector>
+
+namespace rats::app {
+class FavoritesStore;
+}
 
 /**
  * @brief SearchResultModel - Table model for displaying search results
@@ -21,7 +27,8 @@ public:
     enum DataRole {
         ContentTypeRole = Qt::UserRole + 1, // domain::ContentType id
         MatchingPathsRole = Qt::UserRole + 2, // QStringList of highlighted file paths
-        RemoteRole = Qt::UserRole + 3 // true if the hit came from a peer, not the local index
+        RemoteRole = Qt::UserRole + 3, // true if the hit came from a peer, not the local index
+        HashRole = Qt::UserRole + 4
     };
 
     explicit SearchResultModel(QObject* parent = nullptr);
@@ -37,6 +44,7 @@ public:
     // Custom methods for torrent results
     void setResults(const QVector<rats::domain::SearchHit>& results);
     void addResult(const rats::domain::SearchHit& result);
+    void addResults(const QVector<rats::domain::SearchHit>& results);
     void clearResults();
 
     // File search results methods
@@ -51,12 +59,27 @@ public:
     int resultCount() const { return results_.size(); }
 
 private:
-    void mergeFileResultIntoExisting(const rats::domain::SearchHit& fileResult);
     void applyCurrentSort();
 
     QVector<rats::domain::SearchHit> results_;
+    QHash<QString, int> rowByHash_;
     int sortColumn_ = -1;
     Qt::SortOrder sortOrder_ = Qt::DescendingOrder;
+};
+
+class SearchResultsFilter : public QSortFilterProxyModel {
+public:
+    explicit SearchResultsFilter(rats::app::FavoritesStore* favorites, QObject* parent = nullptr);
+    void setHideFavorites(bool enabled);
+    void sort(int column, Qt::SortOrder order) override;
+
+protected:
+    bool filterAcceptsRow(int row, const QModelIndex& parent) const override;
+
+private:
+    void updateFilter(bool enabled);
+    rats::app::FavoritesStore* favorites_;
+    bool hideFavorites_ = false;
 };
 
 #endif // SEARCHRESULTMODEL_H

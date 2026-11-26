@@ -44,6 +44,7 @@ domain::PeerStats PeerRegistry::ourStats() const
     s.totalSize = ourTotalSize_;
     s.peersConnected = transport_->peerCount();
     s.databaseSharing = ourDatabaseSharing_;
+    s.searchProtocol = domain::PeerStats::kSearchProtocol;
     return s;
 }
 
